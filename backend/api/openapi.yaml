@@ -1,0 +1,334 @@
+openapi: 3.0.3
+info:
+  title: Internal Developer Portal API
+  description: >
+    Service catalog API: teams, services, dependencies and API specs.
+    This spec is the single source of truth — the Go server interfaces and the
+    TypeScript client are both generated from it.
+  version: 0.1.0
+  contact:
+    name: Otso Heinämäki
+  license:
+    name: MIT
+    url: https://opensource.org/license/mit
+servers:
+  - url: /api/v1
+    description: Mounted under /api/v1 by the server
+
+# Entra ID JWT bearer auth; enforced from week 2 (dev-mode fallback locally).
+security:
+  - bearerAuth: []
+
+tags:
+  - name: services
+    description: Service catalog entries
+  - name: teams
+    description: Owning teams
+
+paths:
+  /services:
+    get:
+      operationId: ListServices
+      tags: [services]
+      summary: List services
+      parameters:
+        - name: team
+          in: query
+          description: Filter by owning team slug
+          schema:
+            type: string
+        - name: lifecycle
+          in: query
+          description: Filter by lifecycle stage
+          schema:
+            $ref: "#/components/schemas/Lifecycle"
+        - name: tag
+          in: query
+          description: Filter by tag name
+          schema:
+            type: string
+        - name: q
+          in: query
+          description: Free-text search over name and description
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of services
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceList"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+    post:
+      operationId: CreateService
+      tags: [services]
+      summary: Register a new service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceCreate"
+      responses:
+        "201":
+          description: Service created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+
+  /services/{serviceId}:
+    parameters:
+      - name: serviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: GetService
+      tags: [services]
+      summary: Get a service by id
+      responses:
+        "200":
+          description: The service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+    put:
+      operationId: UpdateService
+      tags: [services]
+      summary: Update a service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceUpdate"
+      responses:
+        "200":
+          description: Updated service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+    delete:
+      operationId: DeleteService
+      tags: [services]
+      summary: Delete a service
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+
+  /teams:
+    get:
+      operationId: ListTeams
+      tags: [teams]
+      summary: List teams
+      responses:
+        "200":
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamList"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Microsoft Entra ID access token
+
+  responses:
+    ErrorResponse:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Lifecycle:
+      type: string
+      description: Lifecycle stage of a service
+      enum: [production, beta, deprecated]
+
+    TeamRef:
+      type: object
+      description: Reference to the owning team
+      required: [id, name, slug]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+
+    Team:
+      type: object
+      required: [id, name, slug, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    TeamList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Team"
+
+    Service:
+      type: object
+      required: [id, name, slug, lifecycle, team, tags, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        lifecycle:
+          $ref: "#/components/schemas/Lifecycle"
+        repoUrl:
+          type: string
+          format: uri
+        runbookUrl:
+          type: string
+          format: uri
+        team:
+          $ref: "#/components/schemas/TeamRef"
+        tags:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ServiceCreate:
+      type: object
+      required: [name, slug, teamId, lifecycle]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 2000
+        lifecycle:
+          $ref: "#/components/schemas/Lifecycle"
+        repoUrl:
+          type: string
+          format: uri
+        runbookUrl:
+          type: string
+          format: uri
+        teamId:
+          type: string
+          format: uuid
+        tags:
+          type: array
+          items:
+            type: string
+
+    ServiceUpdate:
+      type: object
+      required: [name, lifecycle, teamId]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 2000
+        lifecycle:
+          $ref: "#/components/schemas/Lifecycle"
+        repoUrl:
+          type: string
+          format: uri
+        runbookUrl:
+          type: string
+          format: uri
+        teamId:
+          type: string
+          format: uuid
+        tags:
+          type: array
+          items:
+            type: string
+
+    ServiceList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Service"
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable message
