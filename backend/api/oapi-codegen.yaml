@@ -1,0 +1,10 @@
+package: api
+# Relative to the go:generate directive's directory (internal/api)
+output: gen.go
+generate:
+  chi-server: true
+  strict-server: true
+  models: true
+  embedded-spec: true
+output-options:
+  skip-prune: false

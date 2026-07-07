@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/OtsoH/internal-developer-portal/backend/internal/api"
 	"github.com/OtsoH/internal-developer-portal/backend/internal/httpx"
 )
 
@@ -40,6 +41,9 @@ func run(logger *slog.Logger) error {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
+
+	apiServer := api.NewServer()
+	r.Mount("/api/v1", api.HandlerFromMux(api.NewStrictHandler(apiServer, nil), chi.NewRouter()))
 
 	addr := ":" + envOr("PORT", "8080")
 	srv := &http.Server{
