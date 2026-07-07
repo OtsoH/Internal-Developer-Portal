@@ -29,3 +29,6 @@ frontend/next-env.d.ts
 
 # Logs
 *.log
+
+# Browser automation artifacts
+.playwright-mcp/
