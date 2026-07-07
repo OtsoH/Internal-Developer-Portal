@@ -1,17 +1,17 @@
 # Internal Developer Portal
 
-A Backstage-lite **Internal Developer Portal**: a service catalog that tracks what services exist, who owns them, what APIs they expose, and how they depend on each other.
+A Backstage-lite service catalog: it tracks what services exist, who owns them, what APIs they expose, and how they depend on each other.
 
 > After building flag governance at Elisa, I built service governance.
 
 ## Features (MVP)
 
-- 📇 **Service catalog** — CRUD with ownership, lifecycle, repo/runbook links, tags
-- 🔐 **Auth & RBAC** — Microsoft Entra External ID, ADMIN/EDITOR/VIEWER per team
-- 📜 **API specs** — upload, validate, version and render OpenAPI docs (Redoc)
-- 🕸️ **Dependency graph** — interactive React Flow visualization with cycle detection
-- 🔎 **Search** — Postgres full-text search across names, descriptions and tags
-- ☁️ **Azure-native** — Container Apps, Postgres Flexible Server, Key Vault, App Insights, Bicep IaC, GitHub Actions with OIDC
+- Service catalog with ownership, lifecycle, repo/runbook links and tags
+- Auth via Microsoft Entra External ID, with ADMIN/EDITOR/VIEWER roles per team
+- OpenAPI spec upload, validation, versioning and Redoc rendering
+- Interactive dependency graph (React Flow) with cycle detection
+- Postgres full-text search across names, descriptions and tags
+- Runs on Azure: Container Apps, Postgres Flexible Server, Key Vault, App Insights, Bicep IaC, GitHub Actions with OIDC
 
 ## Tech Stack
 
@@ -19,9 +19,9 @@ A Backstage-lite **Internal Developer Portal**: a service catalog that tracks wh
 |---|---|
 | Backend | Go, chi, oapi-codegen, pgx + sqlc, golang-migrate, log/slog |
 | Frontend | Next.js (App Router), TypeScript, Tailwind, shadcn/ui, TanStack Query, React Flow |
-| Contract | OpenAPI 3 (`backend/api/openapi.yaml`) — single source of truth for both codegens |
+| Contract | OpenAPI 3 (`backend/api/openapi.yaml`), the single source of truth for both codegens |
 | Database | PostgreSQL 17 |
-| Infra | Azure Container Apps, ACR, Key Vault, App Insights — Bicep |
+| Infra | Azure Container Apps, ACR, Key Vault, App Insights, defined in Bicep |
 | CI/CD | GitHub Actions with OIDC federation (no static cloud secrets) |
 
 ## Repository Layout
@@ -50,9 +50,9 @@ docker compose up -d --build
 | Frontend | http://localhost:3000 |
 | API | http://localhost:8080/api/v1/services |
 | Health | http://localhost:8080/healthz |
-| Postgres | localhost:5433 (`idp`/`idp`, db `idp`) — host port 5433 to avoid clashing with a native install |
+| Postgres | localhost:5433 (`idp`/`idp`, db `idp`); host port 5433 avoids clashing with a native install |
 
-The database is migrated and seeded automatically on backend startup (`APP_SEED=true` in compose). Both apps hot-reload on edit (via polling — Windows bind mounts emit no file events).
+The database is migrated and seeded automatically on backend startup (`APP_SEED=true` in compose). Both apps hot-reload on edit, via polling because Windows bind mounts emit no file events.
 
 **Fastest dev loop on Windows:** run only the infra in Docker and the frontend natively:
 
