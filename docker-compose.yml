@@ -34,6 +34,25 @@ services:
       postgres:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    # Webpack dev server here, not Turbopack: only webpack's watcher honors
+    # WATCHPACK_POLLING, which bind mounts on Windows/macOS require
+    command: ["pnpm", "exec", "next", "dev"]
+    ports:
+      - "3000:3000"
+    environment:
+      BACKEND_URL: http://backend:8080
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+
 volumes:
   pgdata:
   gomodcache:

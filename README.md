@@ -39,7 +39,36 @@ A Backstage-lite **Internal Developer Portal**: a service catalog that tracks wh
 
 ## Quickstart
 
-_Coming with the first vertical slice — `docker compose up` will start Postgres + backend + frontend._
+Requires Docker Desktop.
+
+```sh
+docker compose up -d --build
+```
+
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| API | http://localhost:8080/api/v1/services |
+| Health | http://localhost:8080/healthz |
+| Postgres | localhost:5433 (`idp`/`idp`, db `idp`) — host port 5433 to avoid clashing with a native install |
+
+The database is migrated and seeded automatically on backend startup (`APP_SEED=true` in compose). Both apps hot-reload on edit (via polling — Windows bind mounts emit no file events).
+
+**Fastest dev loop on Windows:** run only the infra in Docker and the frontend natively:
+
+```sh
+docker compose up -d postgres backend
+cd frontend && pnpm install && pnpm dev
+```
+
+### Regenerating from the OpenAPI contract
+
+`backend/api/openapi.yaml` is the single source of truth:
+
+```sh
+cd backend && go generate ./...     # Go server interfaces (oapi-codegen) + sqlc queries
+cd frontend && pnpm generate:api    # TypeScript client types (openapi-typescript)
+```
 
 ## Documentation
 
