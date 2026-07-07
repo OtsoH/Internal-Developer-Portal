@@ -4,7 +4,7 @@
 
 ## Context
 
-The Internal Developer Portal consists of a Go API, a Next.js frontend, Bicep infrastructure templates and CI/CD workflows. They share one OpenAPI contract (`backend/api/openapi.yaml`) from which both the Go server interfaces and the TypeScript client are generated. The project is built by a single developer on a 2–4 week part-time schedule.
+The Internal Developer Portal consists of a Go API, a Next.js frontend, Bicep infrastructure templates and CI/CD workflows. They share one OpenAPI contract (`backend/api/openapi.yaml`) from which both the Go server interfaces and the TypeScript client are generated. The project is built by a single developer on a 2-4 week part-time schedule.
 
 ## Decision
 
