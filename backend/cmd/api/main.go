@@ -46,6 +46,11 @@ func run(logger *slog.Logger) error {
 			return err
 		}
 		defer pool.Close()
+		if os.Getenv("APP_SEED") == "true" {
+			if err := db.Seed(context.Background(), pool, logger); err != nil {
+				return err
+			}
+		}
 		queries = dbgen.New(pool)
 	}
 
