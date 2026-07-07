@@ -12,9 +12,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/OtsoH/internal-developer-portal/backend/internal/api"
 	"github.com/OtsoH/internal-developer-portal/backend/internal/db"
+	dbgen "github.com/OtsoH/internal-developer-portal/backend/internal/db/gen"
 	"github.com/OtsoH/internal-developer-portal/backend/internal/httpx"
 )
 
@@ -31,6 +33,7 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
+	var queries *dbgen.Queries
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
 		logger.Warn("DATABASE_URL not set, skipping migrations; API serves stub data only")
@@ -38,6 +41,12 @@ func run(logger *slog.Logger) error {
 		if err := db.Migrate(databaseURL, logger); err != nil {
 			return err
 		}
+		pool, err := pgxpool.New(context.Background(), databaseURL)
+		if err != nil {
+			return err
+		}
+		defer pool.Close()
+		queries = dbgen.New(pool)
 	}
 
 	r := chi.NewRouter()
@@ -52,7 +61,7 @@ func run(logger *slog.Logger) error {
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	apiServer := api.NewServer()
+	apiServer := api.NewServer(queries)
 	r.Mount("/api/v1", api.HandlerFromMux(api.NewStrictHandler(apiServer, nil), chi.NewRouter()))
 
 	addr := ":" + envOr("PORT", "8080")
