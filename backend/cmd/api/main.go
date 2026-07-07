@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/OtsoH/internal-developer-portal/backend/internal/api"
+	"github.com/OtsoH/internal-developer-portal/backend/internal/db"
 	"github.com/OtsoH/internal-developer-portal/backend/internal/httpx"
 )
 
@@ -30,6 +31,15 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		logger.Warn("DATABASE_URL not set, skipping migrations; API serves stub data only")
+	} else {
+		if err := db.Migrate(databaseURL, logger); err != nil {
+			return err
+		}
+	}
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
