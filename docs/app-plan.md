@@ -28,18 +28,19 @@ Plugin system, software templates/scaffolding, TechDocs hosting, scorecards, mul
 
 ## Tech Stack
 
-**Backend (Go 1.22+)**
+**Backend (Go 1.26+)** — toolchain is 1.26 because `sqlc` 1.31 requires it
 - HTTP: `chi` router
-- OpenAPI codegen: `oapi-codegen` (generates types + chi server interfaces from `api/openapi.yaml`)
-- DB: `pgx` + `sqlc` for type-safe queries
-- Migrations: `golang-migrate`
+- OpenAPI codegen: `oapi-codegen` v2 (types + chi **strict-server** interfaces from `api/openapi.yaml`)
+- DB: `pgx/v5` + `sqlc` for type-safe queries
+- Migrations: `golang-migrate` used as a **library** — migrations are embedded (`embed.FS`) and applied at server startup; no separate migrate CLI
+- Codegen tools (`oapi-codegen`, `sqlc`) pinned as go.mod `tool` directives, invoked via `go generate ./...` / `go tool sqlc generate` (no global installs)
 - Auth: `github.com/coreos/go-oidc` for Entra JWT validation
 - Logging: stdlib `log/slog`
 - Testing: `testify` + `testcontainers-go` (real Postgres in integration tests)
 
-**Frontend (Next.js 15 + TS)**
+**Frontend (Next.js 15 + TS)** — `pnpm` (via corepack) as the package manager
 - App Router, server components where they help
-- Tailwind + `shadcn/ui` for the design system
+- Tailwind **v4** + `shadcn/ui` (radix-nova preset) for the design system
 - TanStack Query for server state
 - React Hook Form + Zod
 - Auth: NextAuth.js with Entra provider (simpler than raw MSAL for App Router)
@@ -102,16 +103,17 @@ internal-dev-portal/
 
 ## Roadmap
 
-### Week 1 — Foundations & first vertical slice
+### Week 1 — Foundations & first vertical slice — ✅ Complete (2026-07-07)
 - Initialize monorepo, README skeleton, ADR-0001 (monorepo).
 - Backend: `go mod init`, chi server, `/healthz`, structured logging.
 - Define `openapi.yaml` for `Service` CRUD + `Team` listing.
 - `oapi-codegen` config; verify generated server interface compiles.
-- Postgres migrations: `teams`, `users`, `services`, `tags`, `service_tags`.
-- `sqlc` queries for services.
+- Postgres migrations: `teams`, `users`, `team_members`, `services`, `tags`, `service_tags`.
+- `sqlc` queries for services + team listing; real read handlers wired to Postgres (mutations return 501 until week 2).
+- Idempotent dev seed (`APP_SEED=true`) so the services endpoint returns data.
 - `docker-compose.yml` for Postgres + backend + frontend hot-reload.
-- Frontend: Next.js + Tailwind + shadcn/ui scaffold, base layout, services list page (mock data).
-- **Milestone:** `curl localhost:8080/api/v1/services` returns seeded data; frontend lists them.
+- Frontend: Next.js + Tailwind + shadcn/ui scaffold, base layout, services list page **wired to the real API** (not mock data — decided during build).
+- **Milestone:** `curl localhost:8080/api/v1/services` returns seeded data; frontend lists them. ✅
 
 ### Week 2 — Auth + RBAC + Service management UI
 - Register Entra External ID tenant + app registrations (backend API, frontend SPA).
@@ -148,6 +150,11 @@ internal-dev-portal/
 - **sqlc over ORM.** Type-safe, SQL-first, no runtime magic — easier to discuss in interviews and matches Go community norms.
 - **Single shared graph endpoint.** Avoids the frontend doing N+1 lookups to render the graph; a single response with nodes + edges feeds React Flow directly.
 - **Bicep over Terraform.** Single Azure target → Bicep keeps tooling minimal and signals Azure fluency.
+- **Migrations applied at startup from an embedded FS.** golang-migrate runs on server boot (idempotent; "no change" = success). No CLI to install; container and local runs self-migrate.
+- **Reproducible codegen via go.mod `tool` directives.** `oapi-codegen` and `sqlc` are pinned in `go.mod` and run through `go generate` / `go tool` — versions travel with the repo, no global binaries.
+- **No CORS: Next rewrites proxy the API.** The browser only ever talks to the frontend origin; `/api/v1/*` is rewritten to `BACKEND_URL`. Server components call the backend directly.
+- **Hot reload in Docker uses webpack, not Turbopack.** The frontend dev container runs `next dev` (webpack) with `WATCHPACK_POLLING=true`; Turbopack ignores polling and misses changes on Windows/macOS bind mounts. Native `pnpm dev` still uses Turbopack.
+- **Local Postgres on host port 5433.** docker-compose maps `5433:5432` to avoid colliding with a natively-installed Postgres on 5432; in-container it stays `postgres:5432`.
 
 ## Data Model (minimum)
 
@@ -163,6 +170,8 @@ api_specs(id, service_id, version, content_jsonb, uploaded_by, uploaded_at)
 service_dependencies(upstream_id, downstream_id, created_at)   -- PK both cols
 audit_log(id, actor_id, action, entity_type, entity_id, payload, at)
 ```
+
+**Implemented so far (week 1):** `teams`, `users`, `team_members`, `services` (without `search_tsv`), `tags`, `service_tags`. Deferred to when their feature lands — `audit_log` with mutations (week 2); `search_tsv` column, `api_specs`, and `service_dependencies` (week 3).
 
 ## Verification
 
