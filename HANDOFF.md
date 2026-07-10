@@ -26,6 +26,15 @@ What exists:
   - Design language: pine/ink oklch palette (hue 170), Geist Sans/Mono, mono slugs + lifecycle status dots (CSS vars `--status-production/beta/deprecated` in `app/globals.css`), `idp://` wordmark. Font variables must stay on `<html>` (see What Didn't Work).
 - **Dev stack**: `docker compose up -d --build` → Postgres 17 + backend (air hot reload) + frontend (webpack dev + polling). All verified working including hot reload in containers.
 
+**CI + test automation landed (2026-07-11), pipeline green on `main`:**
+
+- **CI**: `.github/workflows/ci.yml` — push-to-main + PR + manual triggers, path-filtered jobs via dorny/paths-filter (backend on `backend/**`, frontend on `frontend/**` + the OpenAPI spec, workflow file triggers both), `ci-ok` gate job for future branch protection. Backend job: golangci-lint, codegen drift check (`go generate` + sqlc + `git diff --exit-code`), build, `go test -race` incl. the testcontainers integration test. Frontend job: frozen-lockfile install, API-client drift check, ESLint, `tsc --noEmit`, Vitest, `next build`. CI badge in root README.
+- **Backend tests**: `internal/api/handlers_test.go` unit tests (nil-DB mode, 501 stubs, `serviceFromRow` mapping) run under `go test -short` without Docker.
+- **Lint**: golangci-lint v2.12.2 pinned as a go.mod `tool` directive (same version local + CI, run `go tool golangci-lint run`; config `backend/.golangci.yml`). Its findings were fixed: migrator `Close()` errors now logged, deprecated spoofable `middleware.RealIP` removed from `cmd/api/main.go`.
+- **Frontend tests**: Vitest 4 + Testing Library (jsdom, native tsconfig path aliases in `vitest.config.ts`, jest-dom via `vitest.setup.ts`). Starter tests: `app/services/page.test.tsx` (async server component pattern: `render(await ServicesPage())` with mocked `@/lib/api/client`) and `lib/utils.test.ts`. New scripts: `test`, `test:watch`, `typecheck`.
+- **test-runner subagent**: `.claude/agents/test-runner.md` runs both suites and reports concisely; knows Docker-Desktop/-short fallback. Registered from the next session onward (agent list loads at session start).
+- **CLAUDE.md** added at repo root: session bootstrap pointers, hard rules (incl. the commit rule below), command index, skill-usage map.
+
 ## What Worked
 
 - `go get -tool <pkg>@<version>` (Go 1.25+ tool directives) for reproducible codegen tooling — no global installs.
@@ -34,6 +43,8 @@ What exists:
 - Next rewrites instead of CORS; server components call `BACKEND_URL` directly.
 - shadcn init non-interactively: `pnpm dlx shadcn@latest init --yes --base radix --preset nova --css-variables --no-monorepo` (`--base-color` flag no longer exists).
 - Verifying UI with Playwright MCP (navigate + screenshot); artifacts go to `.playwright-mcp/` which is gitignored.
+- Testing async server components by calling them as functions: `render(await ServicesPage())` with `vi.mock("@/lib/api/client")`.
+- Checking CI without `gh` (not installed): the badge SVG at `github.com/OtsoH/Internal-Developer-Portal/actions/workflows/ci.yml/badge.svg` shows passing/failing without API rate limits.
 
 ## What Didn't Work
 
@@ -43,9 +54,13 @@ What exists:
 - **Geist font variables on `<body>`**: the shadcn Nova preset applies `font-sans` on `<html>`, so vars defined on body left everything rendering serif. Vars must stay on the `<html>` element in `app/layout.tsx`.
 - **oapi-codegen output path**: config `output:` resolves relative to the `go:generate` working dir, not the config file — a `../internal/api/gen.go` path created a stray `internal/internal/` tree. Output is now just `gen.go`.
 - **PowerShell 5.1 quirks**: no `&&`; `Set-Location backend` fails if already in `backend/` (working dir persists between tool calls — check first).
+- **pnpm/action-setup with a root-less package.json**: the action reads `packageManager` from the repo root by default and failed in this monorepo. Fix in place: `package_json_file: frontend/package.json` in ci.yml.
+- **`go test -race` locally**: needs cgo, and this Windows host has no C toolchain — run plain `go test` locally; CI (ubuntu) covers `-race`.
+- **Polling the GitHub API unauthenticated**: 60 req/h rate limit gets exhausted fast by a 10 s poll loop (`gh` CLI is not installed on this machine). Use the badge SVG instead, or install/auth `gh`.
 
 ## Next Steps (Week 2 — see docs/app-plan.md roadmap)
 
+- [ ] **User commits the pending files** (Claude no longer commits — see CLAUDE.md): `CLAUDE.md`, `.claude/agents/test-runner.md`, README updates (root/backend/frontend), this HANDOFF.md update. Proposed message: `chore: add CLAUDE.md, test-runner agent and document testing/CI`.
 - [ ] Register Entra External ID tenant + two app registrations (backend API, frontend SPA) — needs the user's Azure account, ask them to do/authorize this.
 - [ ] Backend auth middleware: OIDC JWT validation via `github.com/coreos/go-oidc`, claims → `User` upsert + team roles.
 - [ ] Dev-mode auth toggle: `AUTH_MODE=dev` accepts a header-based identity for local compose (design decision already in app-plan.md).
@@ -55,4 +70,4 @@ What exists:
 - [ ] Service create/edit forms (React Hook Form + Zod) using the TanStack Query provider already scaffolded in `app/providers.tsx`.
 - [ ] Milestone: logged-in EDITOR can create/edit a service; VIEWER is read-only.
 
-Conventions to keep: one conventional commit per verified step on `main`; OpenAPI spec changes first, then regenerate both sides (`go generate ./...` + `pnpm generate:api`); verify before committing (curl + browser + tests); use design skills/browser tools for UI work (user explicitly asked).
+Conventions to keep: one conventional commit per verified step on `main` — **proposed by Claude, made by the user** (Claude never commits/pushes unless explicitly asked in the moment; rule lives in CLAUDE.md); OpenAPI spec changes first, then regenerate both sides (`go generate ./...` + `pnpm generate:api`); verify before committing (curl + browser + tests); use design skills/browser tools for UI work (user explicitly asked).
