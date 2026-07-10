@@ -18,6 +18,17 @@ docker compose up -d postgres backend
 pnpm dev
 ```
 
+## Tests and checks
+
+```sh
+pnpm test          # Vitest (jsdom + Testing Library)
+pnpm test:watch    # watch mode
+pnpm lint          # ESLint
+pnpm typecheck     # tsc --noEmit
+```
+
+Tests are co-located with the code they cover (`*.test.ts(x)`; not a Next.js route convention, so they're safe inside `app/`). Async server components are tested by calling the component and rendering the resolved element — see `app/services/page.test.tsx`.
+
 ## Regenerating the API client
 
 Types are generated from the shared OpenAPI contract at `../backend/api/openapi.yaml`:

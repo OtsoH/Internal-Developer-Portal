@@ -1,5 +1,7 @@
 # Internal Developer Portal
 
+[![CI](https://github.com/OtsoH/Internal-Developer-Portal/actions/workflows/ci.yml/badge.svg)](https://github.com/OtsoH/Internal-Developer-Portal/actions/workflows/ci.yml)
+
 A Backstage-lite service catalog: it tracks what services exist, who owns them, what APIs they expose, and how they depend on each other.
 
 > After building flag governance at Elisa, I built service governance.
@@ -69,6 +71,17 @@ cd frontend && pnpm install && pnpm dev
 cd backend && go generate ./...     # Go server interfaces (oapi-codegen) + sqlc queries
 cd frontend && pnpm generate:api    # TypeScript client types (openapi-typescript)
 ```
+
+## CI
+
+Every push to `main` and every PR runs [ci.yml](.github/workflows/ci.yml). Jobs are path-filtered (backend and frontend only run when their files change; a spec change triggers both) behind a single `ci-ok` gate check.
+
+| Job | Checks |
+|---|---|
+| Backend | golangci-lint, codegen drift (oapi-codegen + sqlc), build, `go test -race` incl. a testcontainers Postgres integration test |
+| Frontend | pnpm install (frozen lockfile), API client drift (openapi-typescript), ESLint, `tsc --noEmit`, Vitest, `next build` |
+
+The drift checks fail the build if generated code doesn't match `backend/api/openapi.yaml` or the sqlc queries — regenerate and commit.
 
 ## Documentation
 

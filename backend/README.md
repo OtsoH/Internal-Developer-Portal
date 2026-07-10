@@ -47,10 +47,12 @@ go tool sqlc generate    # sqlc: typed query methods from the SQL files
 
 The tools are pinned as `tool` directives in `go.mod` (oapi-codegen v2.7.2, sqlc v1.31.1), so the versions travel with the repo and there are no global installs.
 
-## Tests
+## Tests and lint
 
 ```sh
-go test ./...
+go test ./...            # full suite; the integration test needs Docker running
+go test -short ./...     # unit tests only, no Docker required
+go tool golangci-lint run
 ```
 
-The integration test in `internal/db` spins up a real Postgres with testcontainers, so Docker needs to be running for it to pass.
+The integration test in `internal/db` spins up a real Postgres with testcontainers, so Docker needs to be running for it to pass; `-short` skips it. golangci-lint is pinned as a `tool` directive in `go.mod` like the codegens (config in `.golangci.yml`), so local runs and CI use the same version. The first run compiles it from source and is slow; after that it's cached.
