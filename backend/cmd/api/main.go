@@ -56,7 +56,9 @@ func run(logger *slog.Logger) error {
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	// middleware.RealIP is deliberately absent: it is deprecated as spoofable
+	// (trusts X-Forwarded-For & co. unconditionally, GHSA-3fxj-6jh8-hvhx).
+	// Logs record the direct peer address instead.
 	r.Use(httpx.RequestLogger(logger))
 	r.Use(middleware.Recoverer)
 

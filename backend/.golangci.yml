@@ -1,0 +1,17 @@
+version: "2"
+
+# Run with: go tool golangci-lint run
+# The linter version is pinned as a go.mod tool directive, so local runs and
+# CI always use the same binary.
+
+linters:
+  # standard = errcheck, govet, ineffassign, staticcheck, unused
+  default: standard
+  enable:
+    - gocritic
+    - misspell
+    - unconvert
+
+formatters:
+  enable:
+    - gofmt

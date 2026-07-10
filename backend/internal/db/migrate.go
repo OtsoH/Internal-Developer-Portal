@@ -29,7 +29,11 @@ func Migrate(databaseURL string, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("init migrator: %w", err)
 	}
-	defer m.Close()
+	defer func() {
+		if srcErr, dbErr := m.Close(); srcErr != nil || dbErr != nil {
+			logger.Warn("close migrator", "source_error", srcErr, "db_error", dbErr)
+		}
+	}()
 
 	if err := m.Up(); err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
