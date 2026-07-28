@@ -8,9 +8,17 @@ features.
 ## Hard rules
 
 - **Never commit or push on your own initiative.** When work is verified,
-  propose a conventional commit message and stop — the user makes the commit.
-  Only run `git commit`/`git push` if the user's current message explicitly
-  asks for it.
+  propose the commits and stop — the user makes them. Only run `git commit`/
+  `git push` if the user's current message explicitly asks for it.
+- **Propose a split, not one big commit.** Break verified work along feature
+  seams — one concern per commit, usually a few related files. For each
+  commit give the conventional message and the exact `git add` paths, in the
+  order they must be applied. Every intermediate commit has to build, lint
+  and test clean on its own, so order by dependency: a module before its
+  callers, a test with the code it covers, config before whatever needs it at
+  build time. Say whether you verified that ordering or only reasoned it
+  through. If a split would need code regeneration between commits, say so
+  and offer the collapsed alternative.
 - **OpenAPI-first.** Change `backend/api/openapi.yaml` first, then regenerate
   both sides: `go generate ./...` (backend) and `pnpm generate:api`
   (frontend). CI fails on codegen drift.
