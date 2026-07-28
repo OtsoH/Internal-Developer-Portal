@@ -1,4 +1,4 @@
-import { api } from "@/lib/api/client";
+import { getServerApi } from "@/lib/api/server";
 import type { components } from "@/lib/api/schema";
 import { requireSession } from "@/lib/auth/session";
 import {
@@ -46,9 +46,9 @@ function StatusLine({ services }: { services: Service[] }) {
   );
 }
 
-async function fetchServices(): Promise<
-  { services: Service[] } | { error: string }
-> {
+async function fetchServices(
+  api: ReturnType<typeof getServerApi>,
+): Promise<{ services: Service[] } | { error: string }> {
   try {
     const { data, error } = await api.GET("/services", {
       cache: "no-store",
@@ -66,8 +66,8 @@ async function fetchServices(): Promise<
 }
 
 export default async function ServicesPage() {
-  await requireSession();
-  const result = await fetchServices();
+  const session = await requireSession();
+  const result = await fetchServices(getServerApi(session));
 
   if ("error" in result) {
     return (

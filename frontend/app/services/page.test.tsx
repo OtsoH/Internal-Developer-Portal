@@ -1,12 +1,13 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach, type Mock } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import ServicesPage from "./page";
-import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 
-vi.mock("@/lib/api/client", () => ({
-  api: { GET: vi.fn() },
+const { getMock } = vi.hoisted(() => ({ getMock: vi.fn() }));
+
+vi.mock("@/lib/api/server", () => ({
+  getServerApi: vi.fn(() => ({ GET: getMock })),
 }));
 
 vi.mock("@/lib/auth/session", () => ({
@@ -14,8 +15,6 @@ vi.mock("@/lib/auth/session", () => ({
     user: { email: "dev.editor@example.com", name: "Dev Editor" },
   }),
 }));
-
-const getMock = api.GET as unknown as Mock;
 
 type Service = components["schemas"]["Service"];
 
