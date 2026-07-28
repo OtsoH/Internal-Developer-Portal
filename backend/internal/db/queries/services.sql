@@ -45,3 +45,35 @@ LEFT JOIN service_tags st ON st.service_id = s.id
 LEFT JOIN tags tg ON tg.id = st.tag_id
 WHERE s.id = $1
 GROUP BY s.id, t.id;
+
+-- Does triple duty for PUT and DELETE: 404 detection, the owning-team lookup
+-- that authorization needs, and a row lock so a concurrent mutation on the same
+-- service cannot interleave between the check and the write.
+-- name: GetServiceForUpdate :one
+SELECT id, team_id, slug, name
+FROM services
+WHERE id = $1
+FOR UPDATE;
+
+-- name: InsertService :one
+INSERT INTO services (team_id, name, slug, description, repo_url, runbook_url, lifecycle)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id;
+
+-- updated_at is set explicitly because the table has no trigger. A trigger was
+-- considered and rejected: an invisible mutation sqlc cannot see is worse than
+-- one visible line here.
+-- name: UpdateServiceRow :one
+UPDATE services
+SET team_id = $2,
+    name = $3,
+    description = $4,
+    repo_url = $5,
+    runbook_url = $6,
+    lifecycle = $7,
+    updated_at = now()
+WHERE id = $1
+RETURNING id;
+
+-- name: DeleteServiceRow :execrows
+DELETE FROM services WHERE id = $1;

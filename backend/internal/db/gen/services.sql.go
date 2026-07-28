@@ -12,6 +12,18 @@ import (
 	"github.com/google/uuid"
 )
 
+const deleteServiceRow = `-- name: DeleteServiceRow :execrows
+DELETE FROM services WHERE id = $1
+`
+
+func (q *Queries) DeleteServiceRow(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteServiceRow, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getService = `-- name: GetService :one
 SELECT s.id,
        s.name,
@@ -72,6 +84,66 @@ func (q *Queries) GetService(ctx context.Context, id uuid.UUID) (GetServiceRow, 
 		&i.Tags,
 	)
 	return i, err
+}
+
+const getServiceForUpdate = `-- name: GetServiceForUpdate :one
+SELECT id, team_id, slug, name
+FROM services
+WHERE id = $1
+FOR UPDATE
+`
+
+type GetServiceForUpdateRow struct {
+	ID     uuid.UUID
+	TeamID uuid.UUID
+	Slug   string
+	Name   string
+}
+
+// Does triple duty for PUT and DELETE: 404 detection, the owning-team lookup
+// that authorization needs, and a row lock so a concurrent mutation on the same
+// service cannot interleave between the check and the write.
+func (q *Queries) GetServiceForUpdate(ctx context.Context, id uuid.UUID) (GetServiceForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getServiceForUpdate, id)
+	var i GetServiceForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.TeamID,
+		&i.Slug,
+		&i.Name,
+	)
+	return i, err
+}
+
+const insertService = `-- name: InsertService :one
+INSERT INTO services (team_id, name, slug, description, repo_url, runbook_url, lifecycle)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id
+`
+
+type InsertServiceParams struct {
+	TeamID      uuid.UUID
+	Name        string
+	Slug        string
+	Description string
+	RepoUrl     *string
+	RunbookUrl  *string
+	Lifecycle   string
+}
+
+func (q *Queries) InsertService(ctx context.Context, arg InsertServiceParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertService,
+		arg.TeamID,
+		arg.Name,
+		arg.Slug,
+		arg.Description,
+		arg.RepoUrl,
+		arg.RunbookUrl,
+		arg.Lifecycle,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const listServices = `-- name: ListServices :many
@@ -147,4 +219,45 @@ func (q *Queries) ListServices(ctx context.Context) ([]ListServicesRow, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateServiceRow = `-- name: UpdateServiceRow :one
+UPDATE services
+SET team_id = $2,
+    name = $3,
+    description = $4,
+    repo_url = $5,
+    runbook_url = $6,
+    lifecycle = $7,
+    updated_at = now()
+WHERE id = $1
+RETURNING id
+`
+
+type UpdateServiceRowParams struct {
+	ID          uuid.UUID
+	TeamID      uuid.UUID
+	Name        string
+	Description string
+	RepoUrl     *string
+	RunbookUrl  *string
+	Lifecycle   string
+}
+
+// updated_at is set explicitly because the table has no trigger. A trigger was
+// considered and rejected: an invisible mutation sqlc cannot see is worse than
+// one visible line here.
+func (q *Queries) UpdateServiceRow(ctx context.Context, arg UpdateServiceRowParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, updateServiceRow,
+		arg.ID,
+		arg.TeamID,
+		arg.Name,
+		arg.Description,
+		arg.RepoUrl,
+		arg.RunbookUrl,
+		arg.Lifecycle,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
