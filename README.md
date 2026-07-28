@@ -6,6 +6,8 @@ A Backstage-lite service catalog: it tracks what services exist, who owns them, 
 
 > After building flag governance at Elisa, I built service governance.
 
+**Most of the code here was written by [Claude Code](https://claude.com/claude-code).** I set the direction, made the design decisions, reviewed the diffs, and ran every commit myself. [AI.md](AI.md) documents how that works in practice: the working agreement, how context survives between sessions, which parts the AI got wrong, and how "done" gets verified.
+
 ## Features (MVP)
 
 - Service catalog with ownership, lifecycle, repo/runbook links and tags
@@ -85,5 +87,7 @@ The drift checks fail the build if generated code doesn't match `backend/api/ope
 
 ## Documentation
 
+- [How this project uses AI](AI.md)
 - [Implementation plan](docs/app-plan.md)
 - [ADRs](docs/adr/)
+- [Current state and next steps](HANDOFF.md)
