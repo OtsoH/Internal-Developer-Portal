@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -81,4 +82,31 @@ func TestMigrateSeedAndListServices(t *testing.T) {
 	teams, err := queries.ListTeams(ctx)
 	require.NoError(t, err)
 	require.Len(t, teams, 2)
+
+	// The three dev personas and their asymmetric memberships are what make the
+	// RBAC matrix demonstrable locally, so pin them here.
+	var users int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM users").Scan(&users))
+	require.Equal(t, 3, users)
+
+	var memberships int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM team_members").Scan(&memberships))
+	require.Equal(t, 4, memberships)
+
+	editorRoles, err := queries.ListTeamRolesForUser(ctx,
+		uuid.MustParse("aaaaaaaa-0000-0000-0000-000000000002"))
+	require.NoError(t, err)
+	require.Len(t, editorRoles, 2)
+	byTeam := make(map[string]string, len(editorRoles))
+	for _, r := range editorRoles {
+		byTeam[r.TeamSlug] = r.Role
+	}
+	// Membership without power on one team, edit rights on another.
+	require.Equal(t, "VIEWER", byTeam["platform"])
+	require.Equal(t, "EDITOR", byTeam["payments"])
+
+	// Proves migration 000002 ran; mutations start writing here in week 2.
+	var auditRows int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM audit_log").Scan(&auditRows))
+	require.Zero(t, auditRows)
 }
