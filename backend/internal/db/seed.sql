@@ -6,13 +6,28 @@ INSERT INTO teams (id, name, slug) VALUES
     ('22222222-2222-2222-2222-222222222222', 'Payments', 'payments')
 ON CONFLICT (id) DO NOTHING;
 
+-- entra_oid stays NULL: these are the AUTH_MODE=dev personas, matched by email.
+-- A real Entra login with the same address adopts the row (see UpsertUserByEmail).
 INSERT INTO users (id, entra_oid, email, name) VALUES
     ('aaaaaaaa-0000-0000-0000-000000000001', NULL, 'dev.admin@example.com', 'Dev Admin'),
-    ('aaaaaaaa-0000-0000-0000-000000000002', NULL, 'dev.editor@example.com', 'Dev Editor')
+    ('aaaaaaaa-0000-0000-0000-000000000002', NULL, 'dev.editor@example.com', 'Dev Editor'),
+    ('aaaaaaaa-0000-0000-0000-000000000003', NULL, 'dev.viewer@example.com', 'Dev Viewer')
 ON CONFLICT (id) DO NOTHING;
 
+-- Memberships are deliberately asymmetric so every RBAC outcome is reachable
+-- locally:
+--
+--   actor       Platform                   Payments
+--   Dev Admin   ADMIN (create/edit/delete) no membership -> 403 on mutations
+--   Dev Editor  VIEWER (403 on mutations)  EDITOR (create/edit, 403 on delete)
+--   Dev Viewer  VIEWER (403 on mutations)  no membership -> 403
+--
+-- Everyone still reads the whole catalog: any authenticated user is an
+-- implicit viewer.
 INSERT INTO team_members (team_id, user_id, role) VALUES
     ('11111111-1111-1111-1111-111111111111', 'aaaaaaaa-0000-0000-0000-000000000001', 'ADMIN'),
+    ('11111111-1111-1111-1111-111111111111', 'aaaaaaaa-0000-0000-0000-000000000002', 'VIEWER'),
+    ('11111111-1111-1111-1111-111111111111', 'aaaaaaaa-0000-0000-0000-000000000003', 'VIEWER'),
     ('22222222-2222-2222-2222-222222222222', 'aaaaaaaa-0000-0000-0000-000000000002', 'EDITOR')
 ON CONFLICT (team_id, user_id) DO NOTHING;
 
