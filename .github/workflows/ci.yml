@@ -103,8 +103,12 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # AUTH_MODE is deliberately unset, so this build exercises the same
+      # default a real deployment gets: entra, never the seeded dev personas.
       - name: Build
         run: pnpm build
+        env:
+          AUTH_SECRET: ci-build-only-secret
 
   # Single required check for branch protection: green when every job that
   # ran succeeded (path-skipped jobs count as success).

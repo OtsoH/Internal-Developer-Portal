@@ -46,6 +46,12 @@ services:
     environment:
       BACKEND_URL: http://backend:8080
       WATCHPACK_POLLING: "true"
+      AUTH_MODE: dev
+      # Local-only fixed secret so sessions survive a restart. Real deployments
+      # inject their own.
+      AUTH_SECRET: dev-only-secret-not-for-production
+      # Auth.js v5 rejects the origin it infers from behind the compose network.
+      AUTH_TRUST_HOST: "true"
     volumes:
       - ./frontend:/app
       - /app/node_modules
