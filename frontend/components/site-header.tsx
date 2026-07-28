@@ -1,12 +1,19 @@
 ﻿import Link from "next/link";
 
+import { auth, signOut } from "@/auth";
+
+const authControl =
+  "rounded-md px-2 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
+
 const nav = [
   { href: "/services", label: "Services" },
   { href: "/teams", label: "Teams", disabled: true },
   { href: "/graph", label: "Graph", disabled: true },
 ];
 
-export function SiteHeader() {
+export async function SiteHeader() {
+  const session = await auth();
+
   return (
     <header className="border-b bg-card">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-6 px-4 sm:px-6">
@@ -39,9 +46,27 @@ export function SiteHeader() {
             ),
           )}
         </nav>
-        <span className="ml-auto hidden font-mono text-xs text-muted-foreground sm:block">
-          env: local
-        </span>
+        {session?.user ? (
+          <div className="ml-auto flex items-center gap-3">
+            <span className="hidden font-mono text-xs text-muted-foreground sm:block">
+              {session.user.email}
+            </span>
+            <form
+              action={async () => {
+                "use server";
+                await signOut({ redirectTo: "/signin" });
+              }}
+            >
+              <button type="submit" className={authControl}>
+                sign out
+              </button>
+            </form>
+          </div>
+        ) : (
+          <Link href="/signin" className={`ml-auto ${authControl}`}>
+            sign in
+          </Link>
+        )}
       </div>
     </header>
   );
