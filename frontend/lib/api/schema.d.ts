@@ -36,7 +36,10 @@ export interface paths {
         /** Update a service */
         put: operations["UpdateService"];
         post?: never;
-        /** Delete a service */
+        /**
+         * Delete a service
+         * @description Requires the ADMIN role on the owning team.
+         */
         delete: operations["DeleteService"];
         options?: never;
         head?: never;
@@ -60,6 +63,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The signed-in user and their per-team roles
+         * @description Roles are read from the database on every call rather than carried in the token, so membership changes take effect without re-authenticating.
+         */
+        get: operations["GetCurrentUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -69,6 +92,28 @@ export interface components {
          * @enum {string}
          */
         Lifecycle: "production" | "beta" | "deprecated";
+        /**
+         * @description Role held within a single team
+         * @enum {string}
+         */
+        Role: "ADMIN" | "EDITOR" | "VIEWER";
+        /** @description A team the user belongs to, and their role in it. Team name and slug are denormalized so the UI can render a team picker from this alone. */
+        TeamRole: {
+            /** Format: uuid */
+            teamId: string;
+            teamSlug: string;
+            teamName: string;
+            role: components["schemas"]["Role"];
+        };
+        /** @description The signed-in user. An empty teamRoles list still grants read access to the whole catalog — every authenticated user is an implicit viewer. */
+        CurrentUser: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            name: string;
+            teamRoles: components["schemas"]["TeamRole"][];
+        };
         /** @description Reference to the owning team */
         TeamRef: {
             /** Format: uuid */
@@ -141,6 +186,51 @@ export interface components {
         };
     };
     responses: {
+        /** @description The request body or parameters are invalid */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Missing or invalid credentials */
+        Unauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Authenticated, but lacking the required role on the owning team */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description No such resource */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Conflicts with an existing resource */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Error */
         ErrorResponse: {
             headers: {
@@ -185,7 +275,7 @@ export interface operations {
                     "application/json": components["schemas"]["ServiceList"];
                 };
             };
-            401: components["responses"]["ErrorResponse"];
+            401: components["responses"]["Unauthorized"];
             default: components["responses"]["ErrorResponse"];
         };
     };
@@ -211,8 +301,10 @@ export interface operations {
                     "application/json": components["schemas"]["Service"];
                 };
             };
-            400: components["responses"]["ErrorResponse"];
-            409: components["responses"]["ErrorResponse"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
             default: components["responses"]["ErrorResponse"];
         };
     };
@@ -236,7 +328,8 @@ export interface operations {
                     "application/json": components["schemas"]["Service"];
                 };
             };
-            404: components["responses"]["ErrorResponse"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             default: components["responses"]["ErrorResponse"];
         };
     };
@@ -264,8 +357,10 @@ export interface operations {
                     "application/json": components["schemas"]["Service"];
                 };
             };
-            400: components["responses"]["ErrorResponse"];
-            404: components["responses"]["ErrorResponse"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             default: components["responses"]["ErrorResponse"];
         };
     };
@@ -287,7 +382,9 @@ export interface operations {
                 };
                 content?: never;
             };
-            404: components["responses"]["ErrorResponse"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             default: components["responses"]["ErrorResponse"];
         };
     };
@@ -309,7 +406,29 @@ export interface operations {
                     "application/json": components["schemas"]["TeamList"];
                 };
             };
-            401: components["responses"]["ErrorResponse"];
+            401: components["responses"]["Unauthorized"];
+            default: components["responses"]["ErrorResponse"];
+        };
+    };
+    GetCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The signed-in user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUser"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
             default: components["responses"]["ErrorResponse"];
         };
     };

@@ -24,6 +24,8 @@ tags:
     description: Service catalog entries
   - name: teams
     description: Owning teams
+  - name: auth
+    description: The signed-in user and their roles
 
 paths:
   /services:
@@ -31,6 +33,8 @@ paths:
       operationId: ListServices
       tags: [services]
       summary: List services
+      # TODO(week 3): these filters are validated against this spec but the
+      # handler still ignores them; they land with Postgres FTS.
       parameters:
         - name: team
           in: query
@@ -60,7 +64,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ServiceList"
         "401":
-          $ref: "#/components/responses/ErrorResponse"
+          $ref: "#/components/responses/Unauthorized"
         default:
           $ref: "#/components/responses/ErrorResponse"
     post:
@@ -81,9 +85,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/Service"
         "400":
-          $ref: "#/components/responses/ErrorResponse"
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
-          $ref: "#/components/responses/ErrorResponse"
+          $ref: "#/components/responses/Conflict"
         default:
           $ref: "#/components/responses/ErrorResponse"
 
@@ -106,8 +114,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Service"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
-          $ref: "#/components/responses/ErrorResponse"
+          $ref: "#/components/responses/NotFound"
         default:
           $ref: "#/components/responses/ErrorResponse"
     put:
@@ -128,20 +138,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/Service"
         "400":
-          $ref: "#/components/responses/ErrorResponse"
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: "#/components/responses/ErrorResponse"
+          $ref: "#/components/responses/NotFound"
         default:
           $ref: "#/components/responses/ErrorResponse"
     delete:
       operationId: DeleteService
       tags: [services]
       summary: Delete a service
+      description: Requires the ADMIN role on the owning team.
       responses:
         "204":
           description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: "#/components/responses/ErrorResponse"
+          $ref: "#/components/responses/NotFound"
         default:
           $ref: "#/components/responses/ErrorResponse"
 
@@ -158,7 +177,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/TeamList"
         "401":
+          $ref: "#/components/responses/Unauthorized"
+        default:
           $ref: "#/components/responses/ErrorResponse"
+
+  /me:
+    get:
+      operationId: GetCurrentUser
+      tags: [auth]
+      summary: The signed-in user and their per-team roles
+      description: >
+        Roles are read from the database on every call rather than carried in
+        the token, so membership changes take effect without re-authenticating.
+      responses:
+        "200":
+          description: The signed-in user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentUser"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         default:
           $ref: "#/components/responses/ErrorResponse"
 
@@ -170,7 +209,51 @@ components:
       bearerFormat: JWT
       description: Microsoft Entra ID access token
 
+  # One named response per status code, deliberately. oapi-codegen keeps a
+  # per-operation set of already-used response refs: only the FIRST response in
+  # an operation that points at a given component gets the embedded
+  # `struct{ XJSONResponse }` form, and later ones degrade to a bare
+  # `type Y Error`. Sharing a single ErrorResponse across statuses therefore
+  # makes the generated Go shapes depend on which status codes an operation
+  # happens to declare — adding a 401 silently reshapes its 404. Distinct refs
+  # never collide, so every fixed-status error response stays embedded.
   responses:
+    BadRequest:
+      description: The request body or parameters are invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    Forbidden:
+      description: Authenticated, but lacking the required role on the owning team
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    NotFound:
+      description: No such resource
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    Conflict:
+      description: Conflicts with an existing resource
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    # Used only by `default`, which always generates the {Body, StatusCode} form.
     ErrorResponse:
       description: Error
       content:
@@ -183,6 +266,51 @@ components:
       type: string
       description: Lifecycle stage of a service
       enum: [production, beta, deprecated]
+
+    Role:
+      type: string
+      description: Role held within a single team
+      enum: [ADMIN, EDITOR, VIEWER]
+      # Without this the generator emits bare constants, exporting ADMIN,
+      # EDITOR and VIEWER from package api.
+      x-enum-varnames: [RoleAdmin, RoleEditor, RoleViewer]
+
+    TeamRole:
+      type: object
+      description: >
+        A team the user belongs to, and their role in it. Team name and slug are
+        denormalized so the UI can render a team picker from this alone.
+      required: [teamId, teamSlug, teamName, role]
+      properties:
+        teamId:
+          type: string
+          format: uuid
+        teamSlug:
+          type: string
+        teamName:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+
+    CurrentUser:
+      type: object
+      description: >
+        The signed-in user. An empty teamRoles list still grants read access to
+        the whole catalog — every authenticated user is an implicit viewer.
+      required: [id, email, name, teamRoles]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        teamRoles:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamRole"
 
     TeamRef:
       type: object

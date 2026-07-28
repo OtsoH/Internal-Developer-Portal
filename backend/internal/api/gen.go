@@ -48,6 +48,35 @@ func (e Lifecycle) Valid() bool {
 	}
 }
 
+// Defines values for Role.
+const (
+	RoleAdmin  Role = "ADMIN"
+	RoleEditor Role = "EDITOR"
+	RoleViewer Role = "VIEWER"
+)
+
+// Valid indicates whether the value is a known member of the Role enum.
+func (e Role) Valid() bool {
+	switch e {
+	case RoleAdmin:
+		return true
+	case RoleEditor:
+		return true
+	case RoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// CurrentUser The signed-in user. An empty teamRoles list still grants read access to the whole catalog — every authenticated user is an implicit viewer.
+type CurrentUser struct {
+	Email     openapi_types.Email `json:"email"`
+	Id        openapi_types.UUID  `json:"id"`
+	Name      string              `json:"name"`
+	TeamRoles []TeamRole          `json:"teamRoles"`
+}
+
 // Error defines model for Error.
 type Error struct {
 	// Code Machine-readable error code
@@ -59,6 +88,9 @@ type Error struct {
 
 // Lifecycle Lifecycle stage of a service
 type Lifecycle string
+
+// Role Role held within a single team
+type Role string
 
 // Service defines model for Service.
 type Service struct {
@@ -131,8 +163,32 @@ type TeamRef struct {
 	Slug string             `json:"slug"`
 }
 
+// TeamRole A team the user belongs to, and their role in it. Team name and slug are denormalized so the UI can render a team picker from this alone.
+type TeamRole struct {
+	// Role Role held within a single team
+	Role     Role               `json:"role"`
+	TeamId   openapi_types.UUID `json:"teamId"`
+	TeamName string             `json:"teamName"`
+	TeamSlug string             `json:"teamSlug"`
+}
+
+// BadRequest defines model for BadRequest.
+type BadRequest = Error
+
+// Conflict defines model for Conflict.
+type Conflict = Error
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse = Error
+
+// Forbidden defines model for Forbidden.
+type Forbidden = Error
+
+// NotFound defines model for NotFound.
+type NotFound = Error
+
+// Unauthorized defines model for Unauthorized.
+type Unauthorized = Error
 
 // bearerAuthContextKey is the context key for bearerAuth security scheme
 type bearerAuthContextKey string
@@ -160,6 +216,9 @@ type UpdateServiceJSONRequestBody = ServiceUpdate
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// The signed-in user and their per-team roles
+	// (GET /me)
+	GetCurrentUser(w http.ResponseWriter, r *http.Request)
 	// List services
 	// (GET /services)
 	ListServices(w http.ResponseWriter, r *http.Request, params ListServicesParams)
@@ -183,6 +242,12 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// The signed-in user and their per-team roles
+// (GET /me)
+func (_ Unimplemented) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // List services
 // (GET /services)
@@ -228,6 +293,26 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetCurrentUser operation middleware
+func (siw *ServerInterfaceWrapper) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCurrentUser(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // ListServices operation middleware
 func (siw *ServerInterfaceWrapper) ListServices(w http.ResponseWriter, r *http.Request) {
@@ -557,6 +642,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me", wrapper.GetCurrentUser)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/services", wrapper.ListServices)
 	})
 	r.Group(func(r chi.Router) {
@@ -578,7 +666,69 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	return r
 }
 
+type BadRequestJSONResponse Error
+
+type ConflictJSONResponse Error
+
 type ErrorResponseJSONResponse Error
+
+type ForbiddenJSONResponse Error
+
+type NotFoundJSONResponse Error
+
+type UnauthorizedJSONResponse Error
+
+type GetCurrentUserRequestObject struct {
+}
+
+type GetCurrentUserResponseObject interface {
+	VisitGetCurrentUserResponse(w http.ResponseWriter) error
+}
+
+type GetCurrentUser200JSONResponse CurrentUser
+
+func (response GetCurrentUser200JSONResponse) VisitGetCurrentUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentUser401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetCurrentUser401JSONResponse) VisitGetCurrentUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentUserdefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response GetCurrentUserdefaultJSONResponse) VisitGetCurrentUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type ListServicesRequestObject struct {
 	Params ListServicesParams
@@ -602,7 +752,7 @@ func (response ListServices200JSONResponse) VisitListServicesResponse(w http.Res
 	return err
 }
 
-type ListServices401JSONResponse struct{ ErrorResponseJSONResponse }
+type ListServices401JSONResponse struct{ UnauthorizedJSONResponse }
 
 func (response ListServices401JSONResponse) VisitListServicesResponse(w http.ResponseWriter) error {
 
@@ -655,7 +805,7 @@ func (response CreateService201JSONResponse) VisitCreateServiceResponse(w http.R
 	return err
 }
 
-type CreateService400JSONResponse struct{ ErrorResponseJSONResponse }
+type CreateService400JSONResponse struct{ BadRequestJSONResponse }
 
 func (response CreateService400JSONResponse) VisitCreateServiceResponse(w http.ResponseWriter) error {
 
@@ -669,7 +819,35 @@ func (response CreateService400JSONResponse) VisitCreateServiceResponse(w http.R
 	return err
 }
 
-type CreateService409JSONResponse Error
+type CreateService401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateService401JSONResponse) VisitCreateServiceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateService403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateService403JSONResponse) VisitCreateServiceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateService409JSONResponse struct{ ConflictJSONResponse }
 
 func (response CreateService409JSONResponse) VisitCreateServiceResponse(w http.ResponseWriter) error {
 
@@ -716,7 +894,35 @@ func (response DeleteService204Response) VisitDeleteServiceResponse(w http.Respo
 	return nil
 }
 
-type DeleteService404JSONResponse struct{ ErrorResponseJSONResponse }
+type DeleteService401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteService401JSONResponse) VisitDeleteServiceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteService403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteService403JSONResponse) VisitDeleteServiceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteService404JSONResponse struct{ NotFoundJSONResponse }
 
 func (response DeleteService404JSONResponse) VisitDeleteServiceResponse(w http.ResponseWriter) error {
 
@@ -769,7 +975,21 @@ func (response GetService200JSONResponse) VisitGetServiceResponse(w http.Respons
 	return err
 }
 
-type GetService404JSONResponse struct{ ErrorResponseJSONResponse }
+type GetService401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetService401JSONResponse) VisitGetServiceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetService404JSONResponse struct{ NotFoundJSONResponse }
 
 func (response GetService404JSONResponse) VisitGetServiceResponse(w http.ResponseWriter) error {
 
@@ -823,7 +1043,7 @@ func (response UpdateService200JSONResponse) VisitUpdateServiceResponse(w http.R
 	return err
 }
 
-type UpdateService400JSONResponse struct{ ErrorResponseJSONResponse }
+type UpdateService400JSONResponse struct{ BadRequestJSONResponse }
 
 func (response UpdateService400JSONResponse) VisitUpdateServiceResponse(w http.ResponseWriter) error {
 
@@ -837,7 +1057,35 @@ func (response UpdateService400JSONResponse) VisitUpdateServiceResponse(w http.R
 	return err
 }
 
-type UpdateService404JSONResponse Error
+type UpdateService401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateService401JSONResponse) VisitUpdateServiceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateService403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateService403JSONResponse) VisitUpdateServiceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateService404JSONResponse struct{ NotFoundJSONResponse }
 
 func (response UpdateService404JSONResponse) VisitUpdateServiceResponse(w http.ResponseWriter) error {
 
@@ -889,7 +1137,7 @@ func (response ListTeams200JSONResponse) VisitListTeamsResponse(w http.ResponseW
 	return err
 }
 
-type ListTeams401JSONResponse struct{ ErrorResponseJSONResponse }
+type ListTeams401JSONResponse struct{ UnauthorizedJSONResponse }
 
 func (response ListTeams401JSONResponse) VisitListTeamsResponse(w http.ResponseWriter) error {
 
@@ -922,6 +1170,9 @@ func (response ListTeamsdefaultJSONResponse) VisitListTeamsResponse(w http.Respo
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// The signed-in user and their per-team roles
+	// (GET /me)
+	GetCurrentUser(ctx context.Context, request GetCurrentUserRequestObject) (GetCurrentUserResponseObject, error)
 	// List services
 	// (GET /services)
 	ListServices(ctx context.Context, request ListServicesRequestObject) (ListServicesResponseObject, error)
@@ -969,6 +1220,30 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// GetCurrentUser operation middleware
+func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	var request GetCurrentUserRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCurrentUser(ctx, request.(GetCurrentUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCurrentUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCurrentUserResponseObject); ok {
+		if err := validResponse.VisitGetCurrentUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // ListServices operation middleware
@@ -1142,29 +1417,40 @@ func (sh *strictHandler) ListTeams(w http.ResponseWriter, r *http.Request) {
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"AP//",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

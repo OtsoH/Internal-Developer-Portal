@@ -64,6 +64,10 @@ func (s *Server) DeleteService(ctx context.Context, request DeleteServiceRequest
 	return DeleteServicedefaultJSONResponse{Body: notImplemented(), StatusCode: http.StatusNotImplemented}, nil
 }
 
+func (s *Server) GetCurrentUser(ctx context.Context, request GetCurrentUserRequestObject) (GetCurrentUserResponseObject, error) {
+	return GetCurrentUserdefaultJSONResponse{Body: notImplemented(), StatusCode: http.StatusNotImplemented}, nil
+}
+
 func (s *Server) ListTeams(ctx context.Context, request ListTeamsRequestObject) (ListTeamsResponseObject, error) {
 	if s.q == nil {
 		return ListTeams200JSONResponse(TeamList{Items: []Team{}}), nil
@@ -107,8 +111,8 @@ func serviceFromRow(row dbgen.ListServicesRow) Service {
 	return svc
 }
 
-func notFound(msg string) ErrorResponseJSONResponse {
-	return ErrorResponseJSONResponse{Code: "not_found", Message: msg}
+func notFound(msg string) NotFoundJSONResponse {
+	return NotFoundJSONResponse{Code: "not_found", Message: msg}
 }
 
 func notImplemented() Error {
