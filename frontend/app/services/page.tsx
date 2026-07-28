@@ -1,5 +1,6 @@
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
+import { requireSession } from "@/lib/auth/session";
 import {
   Table,
   TableBody,
@@ -65,6 +66,7 @@ async function fetchServices(): Promise<
 }
 
 export default async function ServicesPage() {
+  await requireSession();
   const result = await fetchServices();
 
   if ("error" in result) {

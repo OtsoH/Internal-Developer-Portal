@@ -9,6 +9,12 @@ vi.mock("@/lib/api/client", () => ({
   api: { GET: vi.fn() },
 }));
 
+vi.mock("@/lib/auth/session", () => ({
+  requireSession: vi.fn().mockResolvedValue({
+    user: { email: "dev.editor@example.com", name: "Dev Editor" },
+  }),
+}));
+
 const getMock = api.GET as unknown as Mock;
 
 type Service = components["schemas"]["Service"];
