@@ -22,8 +22,11 @@ features.
 - **OpenAPI-first.** Change `backend/api/openapi.yaml` first, then regenerate
   both sides: `go generate ./...` (backend) and `pnpm generate:api`
   (frontend). CI fails on codegen drift.
-- **No CORS.** The browser only talks to the frontend origin; Next rewrites
-  proxy `/api/v1` to the backend. Never add CORS headers.
+- **No CORS.** The browser only talks to the frontend origin. A BFF route
+  handler (`frontend/app/api/v1/[...path]/route.ts`) proxies `/api/v1` to the
+  backend, reading the session server-side and attaching the credential — it
+  replaced the old `next.config.ts` rewrite in week 2 step 6, because a rewrite
+  cannot strip forged inbound headers. Never add CORS headers.
 - **Postgres is on host port 5433 by design** (a native install owns 5432).
   Do not "fix" it back to 5432.
 - **Verify before claiming done:** tests + curl + browser check for UI work.
