@@ -68,8 +68,13 @@ func run(logger *slog.Logger) error {
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	apiServer := api.NewServer(queries)
-	r.Mount("/api/v1", api.HandlerFromMux(api.NewStrictHandler(apiServer, nil), chi.NewRouter()))
+	// The generated defaults echo err.Error() to the caller as text/plain; the
+	// options replace both with the Error schema and keep 500 detail in the log.
+	apiServer := api.NewStrictHandlerWithOptions(api.NewServer(queries), nil, api.StrictOptions(logger))
+	r.Mount("/api/v1", api.HandlerWithOptions(apiServer, api.ChiServerOptions{
+		BaseRouter:       chi.NewRouter(),
+		ErrorHandlerFunc: api.ChiErrorHandler,
+	}))
 
 	addr := ":" + envOr("PORT", "8080")
 	srv := &http.Server{
