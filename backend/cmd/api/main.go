@@ -10,14 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/OtsoH/internal-developer-portal/backend/internal/api"
+	"github.com/OtsoH/internal-developer-portal/backend/internal/app"
+	"github.com/OtsoH/internal-developer-portal/backend/internal/auth"
 	"github.com/OtsoH/internal-developer-portal/backend/internal/db"
 	dbgen "github.com/OtsoH/internal-developer-portal/backend/internal/db/gen"
-	"github.com/OtsoH/internal-developer-portal/backend/internal/httpx"
 )
 
 func main() {
@@ -33,48 +32,47 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
-	var queries *dbgen.Queries
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
+	ctx := context.Background()
+
+	authCfg, err := auth.ConfigFromEnv()
+	if err != nil {
+		return err
+	}
+
+	// The pool is declared out here so it can reach both the seed and the
+	// router; a nil pool is the no-database mode.
+	var (
+		pool    *pgxpool.Pool
+		queries *dbgen.Queries
+	)
+	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL == "" {
 		logger.Warn("DATABASE_URL not set, skipping migrations; API serves stub data only")
 	} else {
 		if err := db.Migrate(databaseURL, logger); err != nil {
 			return err
 		}
-		pool, err := pgxpool.New(context.Background(), databaseURL)
+		pool, err = pgxpool.New(ctx, databaseURL)
 		if err != nil {
 			return err
 		}
 		defer pool.Close()
 		if os.Getenv("APP_SEED") == "true" {
-			if err := db.Seed(context.Background(), pool, logger); err != nil {
+			if err := db.Seed(ctx, pool, logger); err != nil {
 				return err
 			}
 		}
 		queries = dbgen.New(pool)
 	}
 
-	r := chi.NewRouter()
-	r.Use(middleware.RequestID)
-	// middleware.RealIP is deliberately absent: it is deprecated as spoofable
-	// (trusts X-Forwarded-For & co. unconditionally, GHSA-3fxj-6jh8-hvhx).
-	// Logs record the direct peer address instead.
-	r.Use(httpx.RequestLogger(logger))
-	r.Use(middleware.Recoverer)
-
-	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	r, err := app.NewRouter(ctx, app.Deps{
+		Queries: queries,
+		Tx:      txBeginner(pool),
+		Auth:    authCfg,
+		Logger:  logger,
 	})
-
-	// The generated defaults echo err.Error() to the caller as text/plain; the
-	// options replace both with the Error schema and keep 500 detail in the log.
-	apiServer := api.NewStrictHandlerWithOptions(api.NewServer(queries), nil, api.StrictOptions(logger))
-	r.Mount("/api/v1", api.HandlerWithOptions(apiServer, api.ChiServerOptions{
-		BaseRouter:       chi.NewRouter(),
-		ErrorHandlerFunc: api.ChiErrorHandler,
-	}))
+	if err != nil {
+		return err
+	}
 
 	addr := ":" + envOr("PORT", "8080")
 	srv := &http.Server{
@@ -107,6 +105,19 @@ func run(logger *slog.Logger) error {
 		}
 		return nil
 	}
+}
+
+// txBeginner converts a possibly-nil pool into a possibly-nil interface.
+//
+// Assigning a nil *pgxpool.Pool straight into an interface field would produce a
+// non-nil interface holding a nil pointer, so the server's own "do I have a
+// database?" check would pass and mutations would panic instead of answering
+// 503. The nil has to be reintroduced at the conversion.
+func txBeginner(pool *pgxpool.Pool) api.TxBeginner {
+	if pool == nil {
+		return nil
+	}
+	return pool
 }
 
 func envOr(key, fallback string) string {
