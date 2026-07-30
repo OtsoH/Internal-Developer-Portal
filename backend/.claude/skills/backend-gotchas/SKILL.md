@@ -99,6 +99,11 @@ left missing entries for `go-jose/v4` and `golang.org/x/oauth2`. Fetch the
 **`go test -race` does not run on this machine.** It needs cgo and there is no C
 toolchain here. Run plain `go test` locally; CI on ubuntu covers `-race`.
 
+**gofmt rewrites `''` inside a comment into a typographic `”`.** Writing
+``NOT NULL DEFAULT ''`` in a doc comment fails the gofmt check, and applying
+`gofmt -w` silently corrupts the text rather than fixing the spacing. Describe
+the empty string in words instead of quoting it.
+
 ## Migrations and seed
 
 golang-migrate runs as a **library** at startup from an embedded FS, so there is
