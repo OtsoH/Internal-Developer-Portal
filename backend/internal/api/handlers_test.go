@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/OtsoH/internal-developer-portal/backend/internal/auth"
@@ -74,24 +73,6 @@ func TestMutationsWithoutDBReturnUnavailable(t *testing.T) {
 	require.True(t, ok, "expected default response, got %T", deleteResp)
 	require.Equal(t, http.StatusServiceUnavailable, del.StatusCode)
 }
-
-// The 501 stubs are still reachable once a database is present — that is what
-// step 9 replaces. A fake TxBeginner is enough to get past the readiness guard.
-func TestMutationsWithDBReturnNotImplemented(t *testing.T) {
-	srv := NewServer(&dbgen.Queries{}, WithTxBeginner(fakeTxBeginner{}))
-	ctx := context.Background()
-
-	createResp, err := srv.CreateService(ctx, CreateServiceRequestObject{})
-	require.NoError(t, err)
-	create, ok := createResp.(CreateServicedefaultJSONResponse)
-	require.True(t, ok, "expected default response, got %T", createResp)
-	require.Equal(t, http.StatusNotImplemented, create.StatusCode)
-	require.Equal(t, "not_implemented", create.Body.Code)
-}
-
-type fakeTxBeginner struct{}
-
-func (fakeTxBeginner) Begin(context.Context) (pgx.Tx, error) { return nil, nil }
 
 // GetCurrentUser reads the principal the middleware attached. Roles come back
 // sorted by team name so the response is stable across map iterations.

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/http"
 	"slices"
 
 	"github.com/jackc/pgx/v5"
@@ -101,26 +100,9 @@ func (s *Server) GetService(ctx context.Context, request GetServiceRequestObject
 	return GetService200JSONResponse(serviceFromRow(dbgen.ListServicesRow(row))), nil
 }
 
-func (s *Server) CreateService(ctx context.Context, request CreateServiceRequestObject) (CreateServiceResponseObject, error) {
-	if !s.dbReady() {
-		return CreateServicedefaultJSONResponse{Body: databaseUnavailable(), StatusCode: http.StatusServiceUnavailable}, nil
-	}
-	return CreateServicedefaultJSONResponse{Body: notImplemented(), StatusCode: http.StatusNotImplemented}, nil
-}
-
-func (s *Server) UpdateService(ctx context.Context, request UpdateServiceRequestObject) (UpdateServiceResponseObject, error) {
-	if !s.dbReady() {
-		return UpdateServicedefaultJSONResponse{Body: databaseUnavailable(), StatusCode: http.StatusServiceUnavailable}, nil
-	}
-	return UpdateServicedefaultJSONResponse{Body: notImplemented(), StatusCode: http.StatusNotImplemented}, nil
-}
-
-func (s *Server) DeleteService(ctx context.Context, request DeleteServiceRequestObject) (DeleteServiceResponseObject, error) {
-	if !s.dbReady() {
-		return DeleteServicedefaultJSONResponse{Body: databaseUnavailable(), StatusCode: http.StatusServiceUnavailable}, nil
-	}
-	return DeleteServicedefaultJSONResponse{Body: notImplemented(), StatusCode: http.StatusNotImplemented}, nil
-}
+// The three mutations live in mutations.go: they share a transaction helper, an
+// authorization helper and the normalization rules, and none of that belongs in
+// the file holding the read paths.
 
 // GetCurrentUser answers from the principal the authentication middleware
 // attached — no query of its own. Principal.Roles already carries each team's
@@ -206,8 +188,19 @@ func unauthorized(msg string) UnauthorizedJSONResponse {
 	return UnauthorizedJSONResponse{Code: "unauthenticated", Message: msg}
 }
 
-func notImplemented() Error {
-	return Error{Code: "not_implemented", Message: "endpoint not implemented yet"}
+func badRequest(msg string) BadRequestJSONResponse {
+	return BadRequestJSONResponse{Code: "bad_request", Message: msg}
+}
+
+func forbidden(msg string) ForbiddenJSONResponse {
+	return ForbiddenJSONResponse{Code: "forbidden", Message: msg}
+}
+
+// Unlike the helpers above, the code is a parameter. 409 will mean more than one
+// thing to a client — a taken slug now, a dependency cycle in week 3 — and a
+// flat "conflict" would not let them tell those apart.
+func conflict(code, msg string) ConflictJSONResponse {
+	return ConflictJSONResponse{Code: code, Message: msg}
 }
 
 // databaseUnavailable is the honest answer when the process runs without
