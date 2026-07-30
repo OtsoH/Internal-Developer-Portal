@@ -72,6 +72,14 @@ func NewRouter(ctx context.Context, deps Deps) (http.Handler, error) {
 		logger.Warn("no database configured: /api/v1 is unauthenticated and serves empty results")
 	}
 
+	// Validation runs after authentication, so an anonymous caller gets 401
+	// rather than a description of the request shape it failed to match.
+	validator, err := api.RequestValidator(logger)
+	if err != nil {
+		return nil, err
+	}
+	apiRouter.Use(validator)
+
 	server := api.NewServer(deps.Queries, api.WithTxBeginner(deps.Tx), api.WithLogger(logger))
 	// The generated error handlers echo err.Error() to the caller as text/plain;
 	// these replace both with the Error schema and keep 500 detail in the log.
