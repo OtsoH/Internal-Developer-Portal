@@ -2,13 +2,13 @@
 
 ## Where we are
 
-**Week 2, step 8 of 14.** Goal and 4-week roadmap: `docs/app-plan.md`.
+**Week 2, step 9 of 14.** Goal and 4-week roadmap: `docs/app-plan.md`.
 Plan with per-step detail, verification commands, risks and the Entra setup
 appendix: `C:\Users\otsoh\.claude\plans\plan-how-to-implement-cached-simon.md`.
 Its "Progress and deviations" section is the authoritative record of where
 reality differed from the plan — read that, not a summary of it.
 
-Steps 1–7 have landed on `main`: `git log --oneline ab9bc22..HEAD`.
+Steps 1–8 have landed on `main`: `git log --oneline ab9bc22..HEAD`.
 
 Traps live in skills that load when you enter the relevant tree:
 `backend-gotchas` (backend/) and `frontend-gotchas` (frontend/). Machine-level
@@ -16,30 +16,33 @@ facts are in the memory directory. Read the matching one before you start.
 
 ## Next step
 
-**Step 8 — spec-driven request validation** via `oapi-codegen/nethttp-middleware`.
-oapi-codegen generates no validation, so a 5000-character name currently reaches
-Postgres. `embedded-spec: true` already emits `GetSwagger()` and `kin-openapi` is
-already a direct dependency, so the spec can do the work.
+**Step 9 — mutation handlers.** `CreateService`/`UpdateService`/`DeleteService`
+still answer 501. New: `internal/api/{mutations,pgerr,audit}.go` +
+`mutations_test.go`. Shape and rationale are in the plan; the parts that are easy
+to get wrong:
 
-Mount it in `internal/app/router.go` on `apiRouter`, **after** the authenticator.
-Three traps, all in the one middleware:
+- **Authorization is in the handlers, 403, via one `requireRole(ctx, teamID, min)`.**
+  Not a `StrictMiddlewareFunc` — see the plan for why, and `backend-gotchas`.
+- **Check order.** Create: `requireRole(body.TeamId, EDITOR)` *before* any query,
+  so a bogus `teamId` is 403 and never leaks whether the team exists. Update and
+  delete: tx → `GetServiceForUpdate` → `ErrNoRows` = 404 → role check on the
+  *existing* row's team, and on the new team too if the team is changing.
+- **One transaction per mutation**, via `inTx(ctx, func(q *dbgen.Queries) error)`.
+  The callback returns a plain error, so expected outcomes need sentinels
+  (`errForbidden`, `errNotFound`, `errSlugConflict`) plus `errors.Is`.
+- **Match the constraint name, not just SQLSTATE 23505.** `services_slug_key` is
+  409 `slug_taken`; `tags_name_key` raises 23505 too and must not report as one.
+- **`nilIfBlank` for repo/runbook URLs.** A form submits `""` for an untouched
+  field, and storing that renders an empty `repo ↗` link.
+- The delete audit payload must be captured *before* the row is gone.
 
-1. Set `swagger.Servers = nil`, or the validator expects a doubly-prefixed path.
-2. Supply an `AuthenticationFunc` returning `nil`. kin-openapi enforces the
-   spec's `security` block, so without it **every dev-mode request 401s**.
-3. Replace the default error handler; it emits `text/plain`. Reuse the `Error`
-   shape from `api.StrictOptions` so validation failures match every other 400.
-
-Droppable step: if it fights back, hand-write `validateServiceCreate` instead
-(the plan has the fallback) and fold it into step 9.
-
-Verify: `?lifecycle=bogus` → 400 JSON, `?lifecycle=beta` → 200,
-`/services/not-a-uuid` → 400, `/healthz` still 200. Note the behaviour change —
-`?lifecycle=bogus` is currently ignored silently.
+Verify with curl as each persona: editor creates in Payments → 201 with
+normalized tags; viewer → 403; editor in Platform (VIEWER there) → 403; duplicate
+slug → 409; PUT → 200 with `updatedAt` moved; admin DELETE in Payments → 403.
+Then inspect `audit_log`.
 
 ## Remaining steps
 
-- [ ] 9 — mutation handlers: transactions, tags, audit rows, pg-error mapping, 403
 - [ ] 10 — API integration test, the role × operation × team matrix
 - [ ] 11 — frontend form deps, shadcn primitives, Zod schema
 - [ ] 12 — create form + role-gated list button

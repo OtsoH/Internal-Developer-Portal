@@ -39,6 +39,36 @@ fails if this regresses.
 `go:generate` directive's directory**, not the config file. A `../internal/api/gen.go`
 value once created a stray `internal/internal/` tree. It is just `gen.go`.
 
+## Spec-driven request validation
+
+`internal/api/validation.go` runs the embedded spec against every request. Four
+things about it are not guessable:
+
+**`spec.Servers` must stay set.** chi's `Mount` rewrites the route context, not
+`r.URL.Path`, so the middleware sees `/api/v1/services`; the gorillamux router
+builds routes as server URL + path, and `servers: [/api/v1]` reproduces that
+prefix. Clear `Servers` and every request 404s with "no matching operation was
+found". `SilenceServersWarning: true` suppresses a warning about Host-header
+validation that cannot apply, because the server URL has no host.
+
+**`AuthenticationFunc` must be the no-op.** kin-openapi enforces the spec's
+`security` block and knows only `Bearer`. Without
+`openapi3filter.NoopAuthenticationFunc`, every dev-mode request 401s here with
+"security requirements failed". Authentication is already done by the time this
+runs.
+
+**`MultiError: true` alone still reports one violation.** Each `SchemaError.Error()`
+appends multi-line `Schema:` and `Value:` blocks — the second echoes the caller's
+whole payload back — so the joined MultiError spans dozens of lines and the first
+line is the only violation that survives truncation. Setting the package-global
+`openapi3.SchemaErrorDetailsDisabled = true` collapses each to a one-line reason;
+only then do all violations fit on one line.
+
+**String `format`s are opt-in.** `format: uuid` and friends are ignored unless
+registered with `openapi3.DefineStringFormat`. `/services/not-a-uuid` is caught
+downstream by `ChiErrorHandler` instead, so it still answers 400 — do not read
+that as proof the validator checked it.
+
 ## sqlc
 
 **A type override does not cover the nullable case.** `db_type: "uuid"` matches
