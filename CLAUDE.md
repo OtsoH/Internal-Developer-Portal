@@ -1,9 +1,12 @@
 # CLAUDE.md
 
 Backstage-lite Internal Developer Portal (Go + Next.js + Postgres, later Azure).
-Read `HANDOFF.md` before starting work — current state, verified quirks, next
-steps. `docs/app-plan.md` is the roadmap and spec; consult it when planning
-features.
+Read `HANDOFF.md` before starting work: it is a cursor, not a ledger, and holds
+only where we are, the next step, and standing constraints. Hard-won traps live
+in the `backend-gotchas` and `frontend-gotchas` skills, which load when you work
+in those trees — read the matching one before editing there. `docs/app-plan.md`
+is the roadmap and spec; consult it when planning features. `docs/AI.md` is
+written for human readers, not for you; skip it unless asked.
 
 ## Hard rules
 
@@ -43,12 +46,16 @@ Full reference: `backend/README.md` and `frontend/README.md`. Most used:
 
 ## Skills — use at the matching moment without being asked
 
+- **Editing anything under `backend/` → `backend-gotchas` first**; anything
+  under `frontend/` → `frontend-gotchas`. These carry the traps that used to
+  live in HANDOFF.md and cost real time to find.
 - Building or restyling UI → `frontend-design`; `ui-ux-pro-max` when
   designing new views (palettes, UX patterns)
 - Reviewing UI/accessibility → `web-design-guidelines`
 - Any chart or graph visualization (incl. the React Flow dependency graph) →
   `dataviz` before writing chart code
 - User-facing prose (READMEs, docs, UI copy) → `humanizer` before finalizing
-- Verifying UI changes → Playwright browser tools (screenshots land in
-  `.playwright-mcp/`, gitignored)
-- Pausing or ending a session → `handoff` skill to update `HANDOFF.md`
+- Verifying UI changes → Playwright browser tools (pass a `filename` under
+  `.playwright-mcp/`; a bare name lands in the repo root, which is not ignored)
+- Pausing or ending a session → `handoff` skill. It routes finished work to its
+  permanent home and keeps `HANDOFF.md` under 120 lines; do not append to it.
