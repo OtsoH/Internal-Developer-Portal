@@ -2,13 +2,16 @@
 
 ## Where we are
 
-**Week 2, step 10 of 14.** Goal and 4-week roadmap: `docs/app-plan.md`.
+**Week 2, step 11 of 14.** Goal and 4-week roadmap: `docs/app-plan.md`.
 Plan with per-step detail, verification commands, risks and the Entra setup
 appendix: `C:\Users\otsoh\.claude\plans\plan-how-to-implement-cached-simon.md`.
 Its "Progress and deviations" section is the authoritative record of where
 reality differed from the plan — read that, not a summary of it.
 
-Steps 1–9 have landed on `main`: `git log --oneline ab9bc22..HEAD`.
+Steps 1–9 have landed on `main`: `git log --oneline ab9bc22..HEAD`. Step 10
+(`internal/api/api_integration_test.go`, the RBAC integration matrix) is written
+and verified — `go test ./internal/api/... -run Integration -v` passes all 27
+subtests, `go test ./...` and lint are clean — but not yet committed.
 
 Traps live in skills that load when you enter the relevant tree:
 `backend-gotchas` (backend/) and `frontend-gotchas` (frontend/). Machine-level
@@ -16,30 +19,29 @@ facts are in the memory directory. Read the matching one before you start.
 
 ## Next step
 
-**Step 10 — API integration test.** New: `internal/api/api_integration_test.go`,
-package `api_test`. Same shape as `db_integration_test.go`: `testing.Short()`
-skip, testcontainers `postgres:17-alpine`, `db.Migrate` + `db.Seed`, then
-`app.NewRouter(...)` behind `httptest.NewServer`.
+**Step 11 — frontend form deps, shadcn primitives, Zod schema.** Modified:
+`package.json`, `app/layout.tsx`. New: `components/ui/{input,label,textarea,
+select,form,sonner}.tsx`, `lib/services/schema.ts` + test.
 
-This is what buys back the cost of authorization living in the handlers rather
-than in middleware: enforcement is not structural, so the matrix is what catches
-a handler that forgets. Table-driven, a deliberate departure from
-`handlers_test.go`'s style at 18 cells.
+Deps: `react-hook-form`, `zod@^4`, `@hookform/resolvers@^5` (v5+ required for
+Zod 4), `sonner`, `@testing-library/user-event` (dev). Two install-time traps:
+`shadcn add` pulls split `@radix-ui/react-*` packages, but this project uses the
+unified `radix-ui` package (`components/ui/button.tsx` does
+`import { Slot } from "radix-ui"`) — rewrite the generated imports and drop the
+split packages. shadcn's `sonner.tsx` imports `next-themes`, which this project
+doesn't use (no dark-mode toggle yet) — hand-edit to a fixed theme with a TODO.
 
-Cover: 401 with no header and with an unknown email; {admin, editor, viewer} ×
-{POST, PUT, DELETE} × {Platform, Payments}; duplicate slug → 409 `slug_taken`;
-bad slug → 400; PUT unknown uuid → 404; PUT moving a service to a team you cannot
-edit → 403 *with the row unchanged*; tag round-trip and normalization; a removed
-tag losing its `service_tags` link while the `tags` row survives; `updatedAt`
-strictly greater after PUT; DELETE then GET → 204 then 404; one `audit_log` row
-per successful mutation, the delete row outliving the service; `GET /me` shape.
+Zod 4 renamed `z.string().url()` → `z.url()` and `.uuid()` → `z.uuid()`.
+`lib/services/schema.ts` mirrors the OpenAPI constraints; `serviceEditSchema =
+serviceFormSchema.omit({ slug: true })` since slug is immutable. Export
+`toCreateBody`/`toUpdateBody` (drop `""` → `undefined`), `parseTags`, `slugify`.
 
-Verify: Docker up, `go test ./internal/api/... -run Integration -v`, and
-`go test -short ./...` still skips it.
+Verify: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`. Adding deps
+needs `docker compose up -d --build frontend` after — `/app/node_modules` is an
+anonymous volume, a host `pnpm install` alone never reaches the container.
 
 ## Remaining steps
 
-- [ ] 11 — frontend form deps, shadcn primitives, Zod schema
 - [ ] 12 — create form + role-gated list button
 - [ ] 13 — detail page, edit, admin-only delete
 - [ ] 14 — docs: ADR-0002, `docs/entra-setup.md`, README updates
