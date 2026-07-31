@@ -84,6 +84,15 @@ describe("serviceFormSchema", () => {
 
   it("rejects an unchosen team", () => {
     expect(fieldErrors({ teamId: "" }).teamId).toContain("Choose a team");
+    expect(fieldErrors({ teamId: "platform" }).teamId).toBeDefined();
+  });
+
+  it("accepts a team id whose version nibble is not a real UUID version", () => {
+    // The seed uses 11111111-1111-1111-1111-111111111111. Zod 4's `z.uuid()`
+    // rejects it on the RFC 9562 variant bits; the form must not.
+    expect(
+      fieldErrors({ teamId: "11111111-1111-1111-1111-111111111111" }).teamId,
+    ).toBeUndefined();
   });
 
   it("rejects an unknown lifecycle", () => {

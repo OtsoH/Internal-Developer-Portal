@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { components } from "@/lib/api/schema";
 
 type Lifecycle = components["schemas"]["Lifecycle"];
+type Service = components["schemas"]["Service"];
 type ServiceCreate = components["schemas"]["ServiceCreate"];
 type ServiceUpdate = components["schemas"]["ServiceUpdate"];
 
@@ -60,7 +61,11 @@ export const serviceFormSchema = z.object({
   lifecycle: z.enum(lifecycles),
   repoUrl: optionalUrl,
   runbookUrl: optionalUrl,
-  teamId: z.uuid("Choose a team"),
+  // `z.guid()`, not `z.uuid()`. Zod 4's `uuid()` enforces the RFC 9562 version
+  // and variant nibbles, which the seeded team ids (11111111-1111-…) do not
+  // carry — it would make every dev-mode team unselectable. OpenAPI's
+  // `format: uuid` asserts a shape, not a version, and so does `guid()`.
+  teamId: z.guid("Choose a team"),
   // One text input, comma-separated. The cap is checked against the parsed
   // list, because the backend would drop the overflow without saying so.
   tags: z
@@ -76,6 +81,20 @@ export const serviceEditSchema = serviceFormSchema.omit({ slug: true });
 
 export type ServiceFormValues = z.infer<typeof serviceFormSchema>;
 export type ServiceEditValues = z.infer<typeof serviceEditSchema>;
+
+export type ServiceFormMode = "create" | "edit";
+
+/**
+ * The schema a form validates against, given its mode. Both produce the same
+ * shape so one `useForm` covers both, but edit mode relaxes `slug` to a plain
+ * string: it renders the field disabled, and refusing to submit over a value
+ * the user is not allowed to change would deadlock the form.
+ */
+export function formSchemaFor(mode: ServiceFormMode) {
+  return mode === "create"
+    ? serviceFormSchema
+    : serviceFormSchema.extend({ slug: z.string() });
+}
 
 /**
  * Splits the tags input into the normalized list the backend stores: lowercase,
@@ -115,6 +134,42 @@ export function slugify(name: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 120)
     .replace(/-+$/, "");
+}
+
+/**
+ * The form state a blank create form starts from. `teamId` is pre-chosen when
+ * the caller has exactly one team to offer, because a picker with one option is
+ * a question with one answer.
+ */
+export function emptyFormValues(teamId = ""): ServiceFormValues {
+  return {
+    name: "",
+    slug: "",
+    description: "",
+    lifecycle: "production",
+    repoUrl: "",
+    runbookUrl: "",
+    teamId,
+    tags: "",
+  };
+}
+
+/**
+ * The form state that shows an existing service. Absent optional fields become
+ * "" rather than `undefined`, so every input stays controlled from first render
+ * — React warns loudly the first time one flips from uncontrolled to controlled.
+ */
+export function toFormValues(service: Service): ServiceFormValues {
+  return {
+    name: service.name,
+    slug: service.slug,
+    description: service.description ?? "",
+    lifecycle: service.lifecycle,
+    repoUrl: service.repoUrl ?? "",
+    runbookUrl: service.runbookUrl ?? "",
+    teamId: service.team.id,
+    tags: formatTags(service.tags),
+  };
 }
 
 // An untouched optional field is "", which must be omitted from the request
