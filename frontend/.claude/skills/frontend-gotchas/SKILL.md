@@ -31,10 +31,25 @@ Init non-interactively (the `--base-color` flag no longer exists):
 pnpm dlx shadcn@latest init --yes --base radix --preset nova --css-variables --no-monorepo
 ```
 
-**`shadcn add` generates imports from split `@radix-ui/react-*` packages, but this
-project uses the unified `radix-ui` package.** Rewrite the generated imports after
-every `add`. Its `sonner.tsx` also pulls `next-themes`; dark mode is unreachable
-today, so hand-edit that file rather than taking the dependency.
+**`shadcn add` can generate imports from split `@radix-ui/react-*` packages, but
+this project uses the unified `radix-ui` package.** Check the generated imports
+after every `add`. The `radix-nova` style got this right for `label` and
+`select` (both emit `from "radix-ui"`), so this is a check, not an automatic
+rewrite — but confirm before assuming, and drop any split package that sneaks
+into `package.json`, or you end up with two copies of a primitive.
+
+**`shadcn add sonner` pulls `next-themes`.** Dark mode is unreachable today, so
+`components/ui/sonner.tsx` is hand-edited to a fixed `theme="light"` with a TODO
+and the dependency removed. Re-adding the component re-adds the dependency.
+
+**`shadcn add form` is a silent no-op under `radix-nova`.** It prints "Checking
+registry", exits 0 and writes nothing; `shadcn view form` shows the item with no
+`files` at all. Nova replaced it with `field`, which has no react-hook-form
+awareness. **`components/ui/form.tsx` is therefore this project's own code, not
+registry output** — a bridge exposing the familiar `Form*` API over the `Field*`
+primitives. Do not try to `shadcn add form` to "restore" it, and do not
+regenerate it; edit it like any other source file. `components/ui/form.test.tsx`
+pins the aria wiring it produces.
 
 **Geist font variables must stay on `<html>`, not `<body>`.** The Nova preset
 applies `font-sans` on `<html>`, so variables defined on body leave everything
@@ -82,6 +97,12 @@ render(await ServicesPage())   // with vi.mock("@/lib/api/server")
 
 **Route-handler tests need `// @vitest-environment node`** at the top of the
 file; `next/server` misbehaves under the globally configured jsdom.
+
+**Testing Library's auto-cleanup does not run here.** It only registers itself
+when Vitest sets `globals: true`, and `vitest.config.ts` does not. Without an
+explicit `afterEach(cleanup)` a second `render` in one file leaves the first
+mounted and every query fails with "found multiple elements". It is wired in
+`vitest.setup.ts` — do not remove it.
 
 ## CI
 

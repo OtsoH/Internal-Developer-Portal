@@ -2,16 +2,16 @@
 
 ## Where we are
 
-**Week 2, step 11 of 14.** Goal and 4-week roadmap: `docs/app-plan.md`.
+**Week 2, step 12 of 14.** Goal and 4-week roadmap: `docs/app-plan.md`.
 Plan with per-step detail, verification commands, risks and the Entra setup
 appendix: `C:\Users\otsoh\.claude\plans\plan-how-to-implement-cached-simon.md`.
 Its "Progress and deviations" section is the authoritative record of where
 reality differed from the plan — read that, not a summary of it.
 
-Steps 1–9 have landed on `main`: `git log --oneline ab9bc22..HEAD`. Step 10
-(`internal/api/api_integration_test.go`, the RBAC integration matrix) is written
-and verified — `go test ./internal/api/... -run Integration -v` passes all 27
-subtests, `go test ./...` and lint are clean — but not yet committed.
+Steps 1–10 have landed on `main`: `git log --oneline ab9bc22..HEAD`. Step 11
+(form deps, shadcn primitives, `lib/services/schema.ts`) is written and verified
+— `pnpm lint`, `pnpm typecheck`, `pnpm test` (47 tests, 5 files) and `pnpm build`
+all clean, container rebuilt — but not yet committed.
 
 Traps live in skills that load when you enter the relevant tree:
 `backend-gotchas` (backend/) and `frontend-gotchas` (frontend/). Machine-level
@@ -19,30 +19,42 @@ facts are in the memory directory. Read the matching one before you start.
 
 ## Next step
 
-**Step 11 — frontend form deps, shadcn primitives, Zod schema.** Modified:
-`package.json`, `app/layout.tsx`. New: `components/ui/{input,label,textarea,
-select,form,sonner}.tsx`, `lib/services/schema.ts` + test.
+**Step 12 — create form and role gating.** New: `app/services/new/page.tsx`,
+`components/services/service-form.tsx`, `lib/api/errors.ts` + tests. Modified:
+`app/services/page.tsx` + its test.
 
-Deps: `react-hook-form`, `zod@^4`, `@hookform/resolvers@^5` (v5+ required for
-Zod 4), `sonner`, `@testing-library/user-event` (dev). Two install-time traps:
-`shadcn add` pulls split `@radix-ui/react-*` packages, but this project uses the
-unified `radix-ui` package (`components/ui/button.tsx` does
-`import { Slot } from "radix-ui"`) — rewrite the generated imports and drop the
-split packages. shadcn's `sonner.tsx` imports `next-themes`, which this project
-doesn't use (no dark-mode toggle yet) — hand-edit to a fixed theme with a TODO.
+Dedicated page, not a dialog: linkable URL, server-side role gating before any
+client JS ships, and step 13's edit route falls out for free.
 
-Zod 4 renamed `z.string().url()` → `z.url()` and `.uuid()` → `z.uuid()`.
-`lib/services/schema.ts` mirrors the OpenAPI constraints; `serviceEditSchema =
-serviceFormSchema.omit({ slug: true })` since slug is immutable. Export
-`toCreateBody`/`toUpdateBody` (drop `""` → `undefined`), `parseTags`, `slugify`.
+`app/services/new/page.tsx` (server) calls `requireSession()` + `getCurrentUser()`
+and filters `teamRoles` to EDITOR/ADMIN, rendering a read-only notice if that
+list is empty. **The team `<Select>` is populated only from editable teams**, so
+the user cannot express a request that would 403. `/teams` is never needed.
 
-Verify: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`. Adding deps
-needs `docker compose up -d --build frontend` after — `/app/node_modules` is an
-anonymous volume, a host `pnpm install` alone never reaches the container.
+`ServiceForm` (`"use client"`) takes `mode: "create" | "edit"`, RHF +
+`zodResolver` over `serviceFormSchema`, TanStack Query `useMutation` over
+`api.POST`. Slug auto-fills from the name via `slugify` until the user touches
+the slug field. Errors route by code: `slug_taken` → `form.setError("slug", …)`
+inline, not a toast; 403 → toast; 401 → `router.push("/signin")`.
+
+> **`router.refresh()` in `onSuccess` is essential and easy to forget** —
+> TanStack Query's cache has nothing to do with the RSC payload that renders the
+> services table.
+
+The list page fills its empty `<div>` sibling with a "New service" button,
+disabled with a `title` when the user has no editor role, matching the header's
+existing "Coming soon" idiom. Empty-state copy loses its "arrives in week 2"
+line. Design language: `rounded-lg border bg-card p-6` panel, mono for
+slug/tags, `font-mono text-xs text-muted-foreground` descriptions, and the
+lifecycle `<Select>` rendering the same `bg-status-*` dots as the table.
+
+Verify: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`, then dev Editor
+registers a service under Payments (redirect, toast, list updated) and dev Viewer
+sees the disabled button. Playwright screenshot — step 11 shipped no visible UI,
+so this is the first browser check since the form work began.
 
 ## Remaining steps
 
-- [ ] 12 — create form + role-gated list button
 - [ ] 13 — detail page, edit, admin-only delete
 - [ ] 14 — docs: ADR-0002, `docs/entra-setup.md`, README updates
 - [ ] Manual, needs the user's Azure account: Entra tenant + two app registrations
