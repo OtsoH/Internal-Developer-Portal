@@ -1,6 +1,9 @@
-import { getServerApi } from "@/lib/api/server";
+import Link from "next/link";
+
+import { getCurrentUser, getServerApi } from "@/lib/api/server";
 import type { components } from "@/lib/api/schema";
 import { requireSession } from "@/lib/auth/session";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -46,6 +49,36 @@ function StatusLine({ services }: { services: Service[] }) {
   );
 }
 
+const NO_EDITOR_ROLE = "Registering a service needs the editor role on a team";
+
+// Disabled rather than hidden, with the reason on hover — the same idiom the
+// header uses for "Coming soon". A control nobody can see is a control nobody
+// knows to ask for. The backend is still the enforcement point.
+function NewServiceButton({ canCreate }: { canCreate: boolean }) {
+  if (!canCreate) {
+    // The title goes on the wrapper, not the button: `Button` sets
+    // `disabled:pointer-events-none`, so a disabled button never receives the
+    // hover that would show its own tooltip. The sr-only copy carries the same
+    // reason to anyone who will not see one.
+    return (
+      <span title={NO_EDITOR_ROLE}>
+        <Button disabled aria-describedby="new-service-reason">
+          New service
+        </Button>
+        <span id="new-service-reason" className="sr-only">
+          {NO_EDITOR_ROLE}
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <Button asChild>
+      <Link href="/services/new">New service</Link>
+    </Button>
+  );
+}
+
 async function fetchServices(
   api: ReturnType<typeof getServerApi>,
 ): Promise<{ services: Service[] } | { error: string }> {
@@ -67,7 +100,14 @@ async function fetchServices(
 
 export default async function ServicesPage() {
   const session = await requireSession();
-  const result = await fetchServices(getServerApi(session));
+  const [result, user] = await Promise.all([
+    fetchServices(getServerApi(session)),
+    getCurrentUser(),
+  ]);
+  const canCreate =
+    user?.teamRoles.some(
+      (team) => team.role === "ADMIN" || team.role === "EDITOR",
+    ) ?? false;
 
   if ("error" in result) {
     return (
@@ -91,13 +131,15 @@ export default async function ServicesPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Services</h1>
           <StatusLine services={services} />
         </div>
+        <NewServiceButton canCreate={canCreate} />
       </div>
 
       {services.length === 0 ? (
         <div className="mt-6 rounded-lg border border-dashed p-8 text-center">
           <p className="text-sm text-muted-foreground">
-            No services registered yet. Service creation arrives with the
-            editor role in week 2.
+            {canCreate
+              ? "No services registered yet. Register the first one."
+              : "No services registered yet. Registering one needs the editor role on a team."}
           </p>
         </div>
       ) : (

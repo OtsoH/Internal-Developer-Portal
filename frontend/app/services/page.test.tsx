@@ -4,10 +4,14 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import ServicesPage from "./page";
 import type { components } from "@/lib/api/schema";
 
-const { getMock } = vi.hoisted(() => ({ getMock: vi.fn() }));
+const { getMock, currentUserMock } = vi.hoisted(() => ({
+  getMock: vi.fn(),
+  currentUserMock: vi.fn(),
+}));
 
 vi.mock("@/lib/api/server", () => ({
   getServerApi: vi.fn(() => ({ GET: getMock })),
+  getCurrentUser: currentUserMock,
 }));
 
 vi.mock("@/lib/auth/session", () => ({
@@ -17,6 +21,23 @@ vi.mock("@/lib/auth/session", () => ({
 }));
 
 type Service = components["schemas"]["Service"];
+type Role = components["schemas"]["Role"];
+
+function userWithRole(role: Role) {
+  return {
+    id: "aaaaaaaa-0000-0000-0000-000000000002",
+    email: "dev.editor@example.com",
+    name: "Dev Editor",
+    teamRoles: [
+      {
+        teamId: "11111111-1111-1111-1111-111111111111",
+        teamSlug: "platform",
+        teamName: "Platform",
+        role,
+      },
+    ],
+  };
+}
 
 function service(overrides: Partial<Service>): Service {
   return {
@@ -45,6 +66,8 @@ async function renderPage() {
 describe("ServicesPage", () => {
   beforeEach(() => {
     getMock.mockReset();
+    currentUserMock.mockReset();
+    currentUserMock.mockResolvedValue(userWithRole("EDITOR"));
   });
 
   it("renders the services table with status line, tags and repo link", async () => {
@@ -91,9 +114,47 @@ describe("ServicesPage", () => {
 
     await renderPage();
 
+    expect(screen.getByText(/No services registered yet/)).toBeInTheDocument();
+  });
+
+  it("links an editor to the registration form", async () => {
+    getMock.mockResolvedValue({ data: { items: [] }, error: undefined });
+
+    await renderPage();
+
+    expect(screen.getByRole("link", { name: "New service" })).toHaveAttribute(
+      "href",
+      "/services/new",
+    );
+    expect(screen.getByText(/Register the first one/)).toBeInTheDocument();
+  });
+
+  it("disables the button for a viewer and says why", async () => {
+    getMock.mockResolvedValue({ data: { items: [] }, error: undefined });
+    currentUserMock.mockResolvedValue(userWithRole("VIEWER"));
+
+    await renderPage();
+
+    const reason = "Registering a service needs the editor role on a team";
+    const button = screen.getByRole("button", { name: "New service" });
+
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription(reason);
+    // The title sits on the wrapper because a disabled button gets no hover.
+    expect(button.parentElement).toHaveAttribute("title", reason);
+    expect(screen.queryByRole("link", { name: "New service" })).toBeNull();
     expect(
-      screen.getByText(/No services registered yet/),
+      screen.getByText(/No services registered yet\. Registering one needs/),
     ).toBeInTheDocument();
+  });
+
+  it("disables the button when the roles could not be loaded", async () => {
+    getMock.mockResolvedValue({ data: { items: [] }, error: undefined });
+    currentUserMock.mockResolvedValue(null);
+
+    await renderPage();
+
+    expect(screen.getByRole("button", { name: "New service" })).toBeDisabled();
   });
 
   it("renders an error panel when the API returns an error", async () => {
