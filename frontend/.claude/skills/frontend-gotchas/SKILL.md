@@ -55,6 +55,28 @@ pins the aria wiring it produces.
 applies `font-sans` on `<html>`, so variables defined on body leave everything
 rendering serif. They live on `<html>` in `app/layout.tsx`.
 
+## Forms and validation
+
+**Use `z.guid()` for ids, never `z.uuid()`.** Zod 4 did not only rename
+`.uuid()` — it now enforces the RFC 9562 version and variant nibbles. The
+seeded ids (`11111111-1111-1111-1111-111111111111`,
+`22222222-…`, `aaaaaaaa-0000-…`) fail that check, so `z.uuid()` makes every
+seeded team, service and user id invalid client-side while the backend accepts
+them happily. `z.guid()` validates the shape only, which is what OpenAPI's
+`format: uuid` means. **Fixtures in new tests should use the seed's id shape**,
+not a real v4 uuid, or this class of bug passes tests and fails in the browser.
+
+**A disabled `Button` cannot show its own `title`.** The variant sets
+`disabled:pointer-events-none`, so it never receives hover. Put the `title` on a
+wrapping `<span>`, and repeat the sentence in an `sr-only` span wired up with
+`aria-describedby` — `title` is not announced to screen readers either way.
+`app/services/page.tsx`'s `NewServiceButton` is the worked example.
+
+**Radix `Select` cannot take `value=""`.** An unchosen picker must pass
+`value={field.value || undefined}` so the placeholder renders. Opening a Select
+in jsdom also needs pointer-event polyfills — tests avoid it by asserting on the
+trigger's text instead.
+
 ## Auth.js v5
 
 **`next-auth/jwt` cannot be augmented from this repo.** It is a bare
